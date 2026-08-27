@@ -27,15 +27,25 @@ No model has been trained yet, so every number the running app reports is
 meaningless — see "Switching to the trained model" below.
 
 `training/` and `models/` do not exist yet. Both are already named in
-`.dockerignore` and in the architecture notes below in anticipation of the next
-phase, which runs on a GPU machine and is the work that remains.
+`.dockerignore` and in the architecture notes below in anticipation of the
+training phase, which is the work that remains.
 
-The one step never verified from this machine is the `docker` job in CI, which
-needs a Linux runner. Check the Actions tab before trusting the image.
+Work has moved to a second Windows machine, and this one has a GPU. The
+serving code is unchanged, but nothing is checked out ready to run: there is no
+`.venv/` here, and the Python on `PATH` is 3.10 while `pyproject.toml` requires
+3.13. See "Commands" for the setup step.
 
 ## Commands
 
 This is a Windows machine; the venv interpreter lives under `Scripts/`, not `bin/`.
+
+The venv is not in the repository. Create it first — `uv` fetches 3.13 itself,
+which is why it is used here even though `requirements.txt` remains the pin:
+
+```bash
+uv venv --python 3.13 .venv
+uv pip install --python .venv/Scripts/python.exe -r requirements-dev.txt
+```
 
 ```bash
 .venv/Scripts/python.exe -m pytest -v                      # all tests
@@ -52,18 +62,19 @@ Dependencies are pinned in `requirements.txt` (runtime) and
 
 ## Environment limits
 
-On the Windows machine where the serving layer was built, `docker`, `gh`, and
-`uv` are **not installed** and there is **no GPU**. Verify what is actually
-available before assuming these limits still apply — the training phase is meant
-to run somewhere else.
+Verified on this machine on 2026-08-27: `docker` 29.7.2, `gh`, and `uv` 0.11.29
+are all installed, and the GPU is an RTX 3050 6GB Laptop on driver 581.86. The
+earlier machine had none of these, which is why parts of the code were written
+without them.
 
-Consequences that shaped the code as it stands:
-
-- The Docker image was never built or smoke-tested locally. GitHub Actions is
-  the verification surface — a Linux runner, which is the real target anyway.
-- Training cannot run there. Everything under `training/` is deferred to a
-  GPU machine; only the serving layer was built on that one.
-- Use `git` directly, not `gh`, for remote operations.
+- **6 GB of VRAM is the binding constraint on training.** Fine-tuning a
+  base-size encoder fits, but only at a small batch size; expect to reach the
+  target effective batch through gradient accumulation and mixed precision
+  rather than raw batch size.
+- The Docker image has still never been built here, only made buildable. CI on a
+  Linux runner remains the verification surface — it is the real target — but the
+  `docker` job can now be reproduced locally when it fails.
+- `gh` is available for remote operations.
 
 ## Architecture
 
@@ -182,7 +193,7 @@ Taken deliberately during implementation; the spec still names the original choi
 | Spec | Actual | Reason |
 |---|---|---|
 | Python 3.11 | 3.13 | Matches the local interpreter, so local equals container |
-| `uv` + `uv.lock` | `venv` + pinned `requirements.txt` | ~10 direct dependencies do not justify installing a new resolver |
+| `uv` + `uv.lock` | `uv venv` + pinned `requirements.txt` | ~10 direct dependencies do not justify a lockfile; `uv` is used to create the venv because it installs Python 3.13 on its own |
 | `fasttext` lid.176 | `py3langid` | fasttext needs a C++ toolchain on Windows; py3langid is pure Python and removes a 917 KB model file from the image |
 
 ## Commits
