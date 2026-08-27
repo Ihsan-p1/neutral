@@ -186,7 +186,7 @@ berlaku literal. Tiga failure mode yang relevan:
 2. **Shortcut learning** — ablation kontrol (mask panjang kalimat dan named
    entity, ukur penurunan performa), contrast set 50 kalimat manual (loaded word
    diganti netral, ukur flip rate), dan visualisasi atribusi token.
-3. **Input di luar cakupan** — deteksi bahasa dengan `fasttext lid.176-compressed`.
+3. **Input di luar cakupan** — deteksi bahasa dengan `py3langid`.
    Input non-Inggris **ditandai dengan peringatan, bukan ditolak**.
 
 Domain gate berbasis kemiripan embedding ke centroid data latih **dihapus dari
@@ -279,7 +279,7 @@ PyTorch, `transformers`, `datasets`, `scikit-learn`, `nela-features`
 
 **Serving (masuk image produksi):**
 FastAPI, `onnxruntime` (CPU), `tokenizers`, `pysbd`, `slowapi`, Gradio,
-`fasttext` (lid.176-compressed), `pydantic-settings`
+`py3langid`, `pydantic-settings`
 
 Pemisahan ini disengaja dan dijaga oleh Dockerfile: PyTorch tidak pernah masuk
 ke image produksi. Detail lengkap ada di spec deployment.
