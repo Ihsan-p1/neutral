@@ -51,3 +51,27 @@ def group_split(group_keys: list[str], n_folds: int = 5, seed: int = 0) -> list[
     menjaga kalimat-kalimat dari satu artikel tidak tersebar ke dua fold.
     """
     return [fold_of(key, n_folds, seed) for key in group_keys]
+
+
+def train_val_test_folds(
+    held_out: int, n_folds: int = 5
+) -> tuple[list[int], int, int]:
+    """Petakan satu fold yang di-hold-out menjadi (train, val, test).
+
+    Fold test adalah `held_out`, fold val adalah tetangganya, dan sisanya train.
+    Karena fold sudah group-clean terhadap `news_link` (lihat `group_split`),
+    ketiganya otomatis tidak berbagi artikel tanpa kode split tambahan.
+
+    Fungsi ini tinggal di sini, bukan di `train.py`, agar dapat di-test di job CI
+    serving yang tidak memasang torch. Lihat catatan di kepala modul.
+    """
+    if n_folds < 3:
+        raise ValueError(
+            f"n_folds minimal 3 agar train tidak kosong, diterima {n_folds}"
+        )
+    if not 0 <= held_out < n_folds:
+        raise ValueError(f"held_out di luar rentang 0..{n_folds - 1}: {held_out}")
+    test = held_out
+    val = (held_out + 1) % n_folds
+    train = [fold for fold in range(n_folds) if fold not in (test, val)]
+    return train, val, test
