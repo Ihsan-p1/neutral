@@ -122,8 +122,11 @@ sekarang adalah tujuan langkah ini.
 - [ ] **Step 7: Bekukan versi hasil resolusi ke `training/requirements-train.txt`**
 
 ```bash
-.venv-train/Scripts/python.exe -m pip freeze > training/requirements-train.txt
+uv pip freeze --python .venv-train/Scripts/python.exe > training/requirements-train.txt
 ```
+
+`uv venv` tidak memasang pip, jadi `python -m pip freeze` gagal dengan
+`No module named pip`. Gunakan `uv pip freeze` seperti di atas.
 
 Lalu sisipkan tiga baris komentar di paling atas file itu:
 

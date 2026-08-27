@@ -42,6 +42,12 @@ Three M1 results carry into everything after it:
 - **3,874 of 4,121 rows survive filtering**: 32 dropped for a missing
   `news_link`, 215 for low annotator agreement, 0 for an unexpected label.
 
+M1 was committed on branch `training-m1` as six commits, one per plan task, and
+PR #1 is open against `main` with both CI jobs green. Merge it as a merge commit
+or a rebase, not a squash: the one-commit-per-task mapping is what the plan is
+checked against. That Linux CI run is also the only evidence `tests/test_split.py`
+passes off Windows.
+
 M2 (fine-tuning DeBERTa) has no plan document yet. Write one before starting it,
 using the M1 numbers above.
 
@@ -63,6 +69,7 @@ The training side has its own venv, so torch never reaches the serving one:
 uv venv --python 3.13 .venv-train
 uv pip install --python .venv-train/Scripts/python.exe -r training/requirements-train.txt
 .venv-train/Scripts/python.exe -m training.run_m1          # M1 report
+uv pip freeze --python .venv-train/Scripts/python.exe     # re-pin; uv venv has no pip
 ```
 
 ```bash
@@ -75,8 +82,10 @@ uv pip install --python .venv-train/Scripts/python.exe -r training/requirements-
 ```
 
 Dependencies are pinned in `requirements.txt` (runtime) and
-`requirements-dev.txt` (adds pytest, httpx, ruff). `pythonpath = ["src"]` in
-`pyproject.toml` means pytest resolves the package without an editable install.
+`requirements-dev.txt` (adds pytest, httpx, ruff). `pythonpath = ["src", "."]`
+in `pyproject.toml` means pytest resolves both `neutral` and `training` without an
+editable install; the repo root is on the list because `tests/test_split.py`
+imports `training.split`.
 
 ## Environment limits
 
