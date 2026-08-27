@@ -19,6 +19,20 @@ Read the spec before changing anything under `src/neutral/`. Several
 constraints below exist for reasons documented there and are not obvious from
 the code alone.
 
+## Current state
+
+The serving layer is finished and runs end to end on the stub backend: 49 tests
+pass, ruff is clean, and the container definition and CI pipeline are written.
+No model has been trained yet, so every number the running app reports is
+meaningless — see "Switching to the trained model" below.
+
+`training/` and `models/` do not exist yet. Both are already named in
+`.dockerignore` and in the architecture notes below in anticipation of the next
+phase, which runs on a GPU machine and is the work that remains.
+
+The one step never verified from this machine is the `docker` job in CI, which
+needs a Linux runner. Check the Actions tab before trusting the image.
+
 ## Commands
 
 This is a Windows machine; the venv interpreter lives under `Scripts/`, not `bin/`.
@@ -38,14 +52,17 @@ Dependencies are pinned in `requirements.txt` (runtime) and
 
 ## Environment limits
 
-`docker`, `gh`, and `uv` are **not installed**, and this machine has **no GPU**.
+On the Windows machine where the serving layer was built, `docker`, `gh`, and
+`uv` are **not installed** and there is **no GPU**. Verify what is actually
+available before assuming these limits still apply — the training phase is meant
+to run somewhere else.
 
-Consequences that shape the work:
+Consequences that shaped the code as it stands:
 
-- The Docker image cannot be built or smoke-tested locally. GitHub Actions is
+- The Docker image was never built or smoke-tested locally. GitHub Actions is
   the verification surface — a Linux runner, which is the real target anyway.
-- Training cannot run here. Everything under `training/` is deferred to a
-  GPU machine; only the serving layer is built on this one.
+- Training cannot run there. Everything under `training/` is deferred to a
+  GPU machine; only the serving layer was built on that one.
 - Use `git` directly, not `gh`, for remote operations.
 
 ## Architecture
@@ -64,12 +81,33 @@ not.
 `StubClassifier` is deterministic (SHA-256 of the sentence mapped to logits) and
 lets the entire pipeline, API, UI, and CI run before any weights exist.
 `OnnxClassifier` is the production path. `load_classifier()` selects between
-them via `NEUTRAL_MODEL_BACKEND`. When trained weights arrive, the only serving
-change is setting that variable and pointing `NEUTRAL_MODEL_DIR` at the model.
+them via `NEUTRAL_MODEL_BACKEND`. No serving logic changes when the weights
+arrive, but the packaging does — see the next section.
 
 **`pipeline.py` holds the analysis logic; `api.py` only handles HTTP.** The
 Gradio UI calls the same `analyze()` function the endpoint calls, so analysis
 behavior is tested without HTTP and the two surfaces cannot drift apart.
+
+## Switching to the trained model
+
+Setting `NEUTRAL_MODEL_BACKEND=onnx` is not sufficient. Three things currently
+assume the stub, and two of them fail silently:
+
+1. **`Dockerfile`** pins `NEUTRAL_MODEL_BACKEND=stub` and has no `COPY models/`.
+   Section 2.3 of the spec bakes the ONNX file into the image at build time
+   rather than fetching it at startup: a thin container that downloads from HF
+   Hub turns a cold start into 30-60 seconds and makes the Hub a boot-time point
+   of failure.
+2. **`.dockerignore`** excludes `models/`. Adding the `COPY` without removing
+   that line copies nothing, and the build still reports success.
+3. **`metadata.json`** must sit beside the weights. `load_classifier()` reads
+   the calibrated temperature and the model version from it; if it is missing,
+   the temperature falls back to `1.0` and every probability the API returns is
+   uncalibrated while still looking entirely plausible.
+
+The README's limitations section also states in bold that the reported numbers
+have no predictive value. That claim stops being true at the same moment and
+must be rewritten with the real evaluation figures.
 
 ## Invariants
 
@@ -118,3 +156,7 @@ Conventional-commit prefixes: `feat:`, `fix:`, `chore:`, `docs:`, `ci:`, `test:`
 
 Work proceeds one plan task at a time: implement, run the tests named in the
 task, then commit. Do not batch several tasks into one commit.
+
+The serving-foundation plan is fully executed. The training phase has no plan
+document yet — write one before starting it, rather than working from the
+deferred-task list at the end of the old plan.
