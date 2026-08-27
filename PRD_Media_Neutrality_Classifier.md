@@ -113,6 +113,45 @@ yang di-paste.
   cross-dataset test set, bukan data latih.
 - **AllSides / Media Bias Fact Check**: bukan ground truth kalimat. Dipakai untuk
   sanity check agregat, dengan koreksi metodologis di bagian 8.3.
+- **Held-out set buatan sendiri**: 100-200 kalimat berita terbaru, dilabeli
+  manual, dipakai **hanya sebagai test out-of-domain**. Spesifikasinya di 5.3.
+
+### 5.0 Lisensi dan penanganan data
+
+Lisensi sumbernya tidak sejelas yang diharapkan, dan ini sudah diperiksa
+langsung:
+
+| Sumber | Lisensi |
+|---|---|
+| BABE di HuggingFace | tidak menyatakan lisensi apa pun |
+| BABE di GitHub (repo paper) | AGPL-3.0 pada level repo |
+| BASIL (kedua repo rilis) | tidak menyatakan lisensi apa pun |
+| MBIB | GPL-3.0 |
+| WNC (Pryzant et al.) | MIT |
+
+AGPL adalah copyleft yang justru terpicu oleh penggunaan lewat jaringan, yaitu
+persis pola deployment project ini. Dua hal meredam risikonya: AGPL di sana
+adalah lisensi kode yang ditempelkan ke seluruh repo yang kebetulan memuat CSV,
+dan bobot model umumnya tidak dianggap karya turunan dari data latihnya. Namun
+keduanya belum teruji, dan card HuggingFace yang kosong secara default berarti
+seluruh hak dipertahankan — bukan bebas pakai.
+
+Karena itu risikonya ditutup lewat proses, bukan lewat penggantian dataset:
+
+- **Dataset tidak pernah masuk repo.** `data/` ada di `.gitignore`. Diunduh saat
+  training, tidak pernah di-commit.
+- **Dataset tidak pernah masuk image Docker.** Yang dibakar ke image hanya
+  `model.onnx`.
+- **Sitasi paper BABE dicantumkan di README**, sesuai permintaan eksplisit
+  penulisnya.
+
+Dengan tidak ada redistribusi, klausul redistribusi lisensi mana pun tidak
+pernah aktif. Bila suatu saat project ini dikomersialkan, izin harus diminta
+langsung ke Media Bias Group — bukan disimpulkan sendiri dari file `LICENSE`.
+
+WNC dicatat sebagai cadangan: berlisensi MIT dan sekitar 50 kali lebih besar.
+Dipakai hanya bila 3.700 kalimat BABE terbukti tidak cukup, dengan konsekuensi
+domainnya Wikipedia, bukan berita.
 
 ### 5.1 Pemeriksaan kualitas sebelum training
 
@@ -137,6 +176,38 @@ Ketentuan:
 
 Ini poin terpenting di seluruh bagian data. Angka yang dihasilkan tanpa
 pengamanan ini tidak layak dilaporkan.
+
+### 5.3 Held-out set buatan sendiri
+
+BABE dikumpulkan dari periode dan daftar outlet yang tetap. Model yang bagus di
+test split BABE belum tentu bagus di berita yang terbit hari ini. Set kecil
+buatan sendiri menutup celah itu dengan biaya beberapa jam saja.
+
+Yang membuat set ini bernilai justru pembatasannya, bukan ukurannya:
+
+- **Hanya test. Tidak pernah dilatih, tidak pernah dipakai memilih model, tidak
+  pernah dipakai men-tuning threshold.** Begitu dipakai untuk salah satu dari
+  itu, ia menjadi dev set dan angkanya kehilangan arti.
+- **Outlet dan periode di luar BABE.** Bila sumbernya sama, ia bukan
+  out-of-domain dan tidak mengukur apa pun yang belum diukur test split BABE.
+- **Pelabelan mengikuti `annotation_guidelines_BABE.pdf`**, bukan intuisi
+  pribadi. Kalau definisi "biased" di set ini berbeda dari definisi BABE, angka
+  yang dihasilkan tidak bisa dibandingkan dengan apa pun — termasuk dengan
+  model ini sendiri di dataset lain.
+
+Dengan satu annotator, inter-annotator agreement tidak terdefinisi. Gantinya,
+ukur **agreement terhadap diri sendiri**: labeli dua kali dengan jeda minimal
+satu minggu, tanpa melihat label pertama, lalu laporkan Cohen's kappa antar dua
+putaran. Bila kappa di bawah sekitar 0,6, set ini belum layak dipakai dan
+panduannya perlu dipertajam lebih dulu — bukan datanya yang ditambah.
+
+Ukuran 100-200 kalimat cukup: tujuannya mendeteksi kegagalan generalisasi yang
+kasar, bukan menghasilkan estimasi F1 berpresisi tinggi. Laporkan selalu
+bersama interval kepercayaannya, yang pada n sekecil ini memang lebar.
+
+Simpan hanya kalimat, label, dan URL sumber. Teks berita berhak cipta; kutipan
+pendek dengan atribusi untuk keperluan riset adalah praktik lazim, mengutip
+artikel utuh bukan.
 
 ## 6. Model & Training
 
@@ -240,6 +311,17 @@ Perbaikan:
 Kategorikan 50 error terparah menjadi taksonomi kegagalan, dan laporkan di
 README. Bagian ini biasanya lebih meyakinkan reviewer teknis dibanding
 visualisasi atribusi, dan hampir selalu dilewatkan orang lain.
+
+### 8.5 Held-out set buatan sendiri
+
+Dilaporkan berdampingan dengan F1 test split BABE, beserta jumlah kalimat,
+interval kepercayaan, dan kappa self-agreement dari 5.3.
+
+**Penurunan di sini diharapkan dan tetap dilaporkan apa adanya.** Selisih antara
+F1 di test split BABE dan F1 di berita terbaru adalah satu-satunya angka di
+seluruh dokumen ini yang mengukur apakah model bekerja di luar distribusi
+latihnya. Angka BABE yang tinggi tanpa pembanding ini tidak membuktikan
+generalisasi apa pun — ia hanya membuktikan model mempelajari BABE.
 
 ## 9. Milestones
 
