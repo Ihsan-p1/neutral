@@ -63,8 +63,12 @@ Protokol yang dipakai memisahkan pemilihan dari pelaporan:
 ```
 sweep  : fold 0 sebagai test, seed 0, lr dalam {1e-5, 2e-5, 3e-5}  ->  3 run
 final  : fold 0..4 x seed 0..4 pada lr terpilih                    ->  25 run
-total  : 28 run
+total  : 27 run yang benar-benar dilatih
 ```
+
+Jumlahnya 27, bukan 28: kombinasi (fold 0, seed 0, lr terpilih) adalah anggota
+sweep sekaligus anggota grid final, dan run kedua memakai hasil yang sudah
+tercatat alih-alih melatih ulang. Angka yang dilaporkan tetap 25 run final.
 
 Learning rate dipilih sekali, dan 47 run tambahan dari grid penuh tidak mengubah
 pilihan itu. PRD 6 sendiri sudah menyatakan grid search penuh dilewati.
@@ -142,7 +146,7 @@ salah tanpa memunculkan error.
 Satu bagian tetap manual: layer-wise learning rate decay yang diminta PRD 6 tidak
 ada di `TrainingArguments`, sehingga optimizer group per layer dibangun sendiri.
 
-Parameter yang tetap di seluruh 28 run, dinyatakan di satu tempat dalam kode:
+Parameter yang tetap di seluruh 27 run, dinyatakan di satu tempat dalam kode:
 
 ```
 model                 : microsoft/deberta-v3-base
@@ -234,7 +238,7 @@ BABE berisi kalimat tunggal, sehingga 128 token diperkirakan cukup, tetapi
 perkiraan itu diperiksa sekali, bukan diasumsikan. Padding dinamis lewat
 `DataCollatorWithPadding` membuat kalimat pendek tidak dibayar sebagai 128 token.
 
-JSONL ditulis setelah setiap run, bukan sekali di akhir. Dua puluh delapan run
+JSONL ditulis setelah setiap run, bukan sekali di akhir. Dua puluh tujuh run
 berjalan sekitar dua jam, dan crash di run ke-20 tidak boleh menghapus hasil 19
 run sebelumnya. Karena itu `run_m2.py` membaca JSONL yang sudah ada saat mulai dan
 melewati kombinasi `(held_out, seed, lr)` yang barisnya sudah tercatat. Menjalankan
@@ -320,7 +324,7 @@ tampak masuk akal tanpa memunculkan error.
 
 Fase ini selesai ketika:
 
-- `run_m2.py` berjalan sampai selesai, 28 run tercatat di `runs/m2_runs.jsonl`
+- `run_m2.py` berjalan sampai selesai, 27 run tercatat di `runs/m2_runs.jsonl`
 - assert kebocoran lulus
 - `tests/test_split.py` lulus bersama seluruh test serving yang sudah ada
 - satu checkpoint ada di `models/deberta-babe/` beserta validation loss-nya
@@ -337,7 +341,7 @@ pekerjaan berikutnya: pemeriksaan kualitas data, bukan M3.
 | Risiko | Mitigasi |
 |---|---|
 | Batch 16 tidak muat di 6 GB VRAM | Fallback ke batch 8 dengan `gradient_accumulation_steps=2`; effective batch tetap 16. Diketahui di run sweep pertama, bukan di run ke-20 |
-| 28 run gagal di tengah jalan | JSONL ditulis per run; run yang sudah tercatat dilewati saat dijalankan ulang |
+| 27 run gagal di tengah jalan | JSONL ditulis per run; run yang sudah tercatat dilewati saat dijalankan ulang |
 | Angka tidak dapat direproduksi persis | Dilaporkan apa adanya dari JSONL; tidak ada klaim bit-exact, dan bobot yang disimpan adalah bobot yang angkanya dilaporkan |
 | Checkpoint terpilih ikut memilih lewat fold test | Seleksi seed memakai validation loss fold 1; fold 0 hanya dilaporkan |
 | DeBERTa hanya menang tipis | Kriteria bagian 6 sudah menetapkan konsekuensinya sebelum angkanya dilihat |
