@@ -48,8 +48,25 @@ or a rebase, not a squash: the one-commit-per-task mapping is what the plan is
 checked against. That Linux CI run is also the only evidence `tests/test_split.py`
 passes off Windows.
 
-M2 (fine-tuning DeBERTa) has no plan document yet. Write one before starting it,
-using the M1 numbers above.
+M2 (fine-tuning DeBERTa) has a design spec but no plan document yet:
+`docs/superpowers/specs/2026-08-28-training-m2-finetune-design.md`. Work happens
+on `training-m2`, branched from `training-m1` because `main` still has no
+`training/` directory until PR #1 merges.
+
+Four M2 decisions are already closed there and are not re-openable by reading the
+code:
+
+- **28 runs, not 75.** The LR sweep (1e-5/2e-5/3e-5) runs on fold 0 only; the
+  chosen rate then runs 5 folds x 5 seeds. LR is selected on validation loss, so
+  no test fold ever influences a choice.
+- **Validation set is the neighbouring fold** (`held_out=i` uses fold `i+1`), so
+  the M1 group-clean folds carry over with no new split code.
+- **One checkpoint survives**, from fold 0 at the seed with the best validation
+  loss. Seed averaging is a reporting device, not the shipped model: serving loads
+  a single ONNX file.
+- **The M2 stop criterion is a number.** DeBERTa must win on at least 4 of 5
+  folds and beat 0.7420 by 0.02. Below that, PRD 9 applies: stop and check data
+  quality, do not keep tuning.
 
 ## Commands
 
