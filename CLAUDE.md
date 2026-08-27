@@ -109,6 +109,23 @@ The README's limitations section also states in bold that the reported numbers
 have no predictive value. That claim stops being true at the same moment and
 must be rewritten with the real evaluation figures.
 
+## Data handling
+
+**Never commit the training data.** `data/` is in `.gitignore`. BABE's
+HuggingFace card states no license at all, and the paper's GitHub repository —
+which contains the same labels — carries AGPL-3.0 at the repo level. AGPL is
+copyleft that triggers on network use, which is exactly this project's
+deployment model. The risk is closed by not redistributing rather than by
+switching datasets: download at training time, never check it in, never copy it
+into the image. Section 5.0 of the PRD records the licenses that were actually
+verified.
+
+The evaluation uses a small hand-labelled held-out set of recent news alongside
+BABE's test split. It is **test-only** — never trained on, never used for model
+selection or threshold tuning. Labelling follows BABE's own annotation
+guidelines so the two sets define `biased` the same way; otherwise the numbers
+cannot be compared. PRD 5.3 has the full constraints.
+
 ## Invariants
 
 These are correctness constraints, not style preferences. Each one is a silent

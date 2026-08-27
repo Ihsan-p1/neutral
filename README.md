@@ -97,6 +97,34 @@ Keterbatasan lain yang berlaku juga setelah model tersedia:
   sedikit kalimat kurang dapat diandalkan, karena itu jumlah kalimat selalu
   ditampilkan bersama skornya.
 
+## Data
+
+Model dilatih pada **BABE** (Bias Annotations By Experts), sekitar 3.700 kalimat
+berita beranotasi ahli dari Media Bias Group.
+
+Dataset **tidak disertakan di repositori ini maupun di image Docker** — diunduh
+saat training dan tidak pernah di-commit. Card HuggingFace BABE tidak menyatakan
+lisensi, sementara repositori GitHub papernya berlisensi AGPL-3.0 pada level
+repo. Dengan tidak melakukan redistribusi, klausul redistribusi kedua sumber
+tidak pernah aktif. Rinciannya di bagian 5.0 PRD.
+
+Evaluasi memakai tiga set: test split BABE (group split per artikel), BASIL
+sebagai cross-dataset, dan satu held-out kecil berisi berita terbaru yang
+dilabeli manual mengikuti panduan anotasi BABE. Set terakhir hanya dipakai untuk
+menguji, tidak pernah untuk melatih atau memilih model.
+
+Bila memakai dataset ini, sitasi papernya:
+
+```bibtex
+@inproceedings{spinde2021neural,
+    title     = {Neural Media Bias Detection Using Distant Supervision With BABE -- Bias Annotations By Experts},
+    author    = {Spinde, Timo and Plank, Manuel and Krieger, Jan-David and Ruas, Terry and Gipp, Bela and Aizawa, Akiko},
+    booktitle = {Findings of the Association for Computational Linguistics: EMNLP 2021},
+    year      = {2021},
+    publisher = {Association for Computational Linguistics}
+}
+```
+
 ## Lisensi
 
 Belum ditentukan.
