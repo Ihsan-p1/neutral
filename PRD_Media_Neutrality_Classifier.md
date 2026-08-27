@@ -104,6 +104,80 @@ Scope menerima input berupa URL. Input URL tetap memerlukan pengambilan konten
 di sisi server dengan seluruh konsekuensinya. Keputusan: v1 hanya menerima teks
 yang di-paste.
 
+### 4.5 Opsi perluasan yang dievaluasi — belum diambil
+
+Dua opsi dievaluasi pada 27 Agustus 2026 dan sengaja tidak dimasukkan ke v1.
+Keduanya dicatat di sini beserta ongkosnya supaya tidak dievaluasi ulang dari
+nol, dan supaya keputusannya dapat dibuka kembali dengan alasan yang jelas —
+bukan karena lupa bahwa pernah dipertimbangkan.
+
+**4.5.1 Membuat data latih tiga kelas sendiri**
+
+Ide: melabeli sendiri data latih untuk `lexical_bias` / `informational_bias` /
+`neutral`, alih-alih membatalkan kelas ketiga seperti di 4.3.
+
+Yang membuatnya tidak sepadan bukan ketiadaan data. BASIL justru sudah memuat
+anotasi span lexical dan informational — taxonomy-nya memang berasal dari sana.
+Masalahnya BASIL sudah dialokasikan sebagai cross-dataset test set (8.2), dan
+memindahkannya ke sisi latih menghapus satu-satunya pengukuran yang membedakan
+generalisasi dari hafalan distribusi BABE.
+
+Melabeli dari nol tidak menghindari biaya itu, hanya memindahkannya:
+
+| | Held-out set (5.3, disetujui) | Data latih tiga kelas |
+|---|---|---|
+| Ukuran | 100-200 kalimat | ≥ 3.000 (BABE: 3.700 untuk dua kelas) |
+| Estimasi waktu | ~4 jam per putaran | ~50 jam per putaran, dua putaran |
+| Jumlah anotator | 1 | 1 |
+| Cukupkah satu anotator? | Ya | Tidak |
+
+Baris terakhir adalah alasan sebenarnya. Test set hanya mengukur, sehingga satu
+anotator dengan kappa self-agreement yang dilaporkan terbuka masih dapat
+dipertahankan. Training set mengajari model: model tidak akan belajar
+"informational bias", melainkan definisi satu orang tentangnya — dan batas
+lexical versus informational masih diperdebatkan di literatur. Tidak ada cara
+membuktikan sebaliknya tanpa anotator kedua.
+
+Syarat membuka kembali: tersedia anotator kedua yang melabeli subset yang sama,
+sehingga inter-annotator agreement dapat dihitung. Tanpa itu, posisi 4.3 tetap
+berlaku.
+
+**4.5.2 Pencarian artikel pembanding dan deteksi misinformasi**
+
+Ide: sistem mencari artikel terkait lewat search engine, lalu selain menilai
+netralitas juga menilai apakah beritanya asli atau palsu dan apakah mengandung
+misinformasi.
+
+Ini task yang berbeda, bukan perluasan dari yang sekarang. Bias leksikal berada
+di dalam kalimat dan dapat dideteksi tanpa pengetahuan tentang dunia; verifikasi
+faktual memerlukan bukti eksternal, penilaian kredibilitas sumber, dan reasoning
+atas bukti tersebut. Tidak ada satu model yang mengerjakan keduanya.
+
+Tiga konsekuensi konkret:
+
+1. **Arsitektur.** Lapisan serving saat ini tidak melakukan panggilan jaringan
+   apa pun saat inferensi. Search API menambahkan API key, rate limit, latensi
+   2-10 detik per request, dan biaya per query — sekaligus menjadikan pihak
+   ketiga sebagai titik kegagalan pada jalur request.
+2. **Privasi.** Teks artikel yang di-paste pengguna harus dikirim ke pihak
+   ketiga. Ini berlawanan dengan prinsip bahwa teks tidak pernah meninggalkan
+   proses, yang mendasari seluruh aturan logging di bagian 7.
+3. **Tidak terukur.** Deteksi bias punya F1 terhadap test split BABE, BASIL, dan
+   held-out set. Klaim "berita ini palsu" tidak punya ground truth di proyek
+   ini. Fitur yang menyatakan kebenaran tanpa cara mengukur akurasinya lebih
+   berbahaya daripada ketiadaannya, karena tetap dipercaya pengguna.
+
+Bentuk yang dapat dipertahankan bila arah ini diteruskan adalah **koroborasi,
+bukan penilaian kebenaran**: melaporkan bahwa sebuah klaim muncul di sekian
+outlet lain, tanpa menyatakan benar atau salah. Itu terukur dan tidak
+menjanjikan yang tidak bisa dibuktikan. Sekalipun begitu ia tetap layanan
+terpisah dengan arsitektur sendiri, dan lebih tepat menjadi proyek kedua
+daripada fitur tempelan — retrieval ditambah verifikasi bukti adalah cerita
+teknis tersendiri yang justru melemah bila digabung.
+
+Syarat membuka kembali: v1 sudah memiliki angka evaluasi nyata, dan metrik untuk
+klaim yang hendak dibuat sudah didefinisikan lebih dulu.
+
 ## 5. Data
 
 - **BABE** (Spinde et al., 2021): sekitar 3.700-4.100 kalimat, expert-annotated,

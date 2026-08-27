@@ -126,6 +126,28 @@ selection or threshold tuning. Labelling follows BABE's own annotation
 guidelines so the two sets define `biased` the same way; otherwise the numbers
 cannot be compared. PRD 5.3 has the full constraints.
 
+## Scope questions already answered
+
+Two extensions were evaluated on 2026-08-27 and deliberately left out of v1.
+PRD 4.5 records both in full. Neither is a rejected idea — both are gated on a
+condition that does not hold yet, and neither belongs in the training phase.
+
+- **Three-class lexical vs informational.** BASIL already carries that taxonomy,
+  but BASIL is the cross-dataset test set. Moving it to the training side
+  deletes the only measurement that separates generalization from memorizing
+  BABE's distribution. Hand-labelling a training set instead needs a *second*
+  annotator: a test set only measures, so one annotator with a reported kappa
+  holds up, but a training set teaches the model one person's reading of a
+  boundary the literature still argues about. Gate: a second annotator exists.
+- **Search-engine lookup and misinformation detection.** A different task, not
+  an extension — it needs external evidence rather than the sentence itself. It
+  would put a third-party call on the request path, send the user's pasted text
+  to that third party, and make a claim with no ground truth anywhere in this
+  project, so its accuracy could never be reported. The defensible form is
+  corroboration ("this claim appears in N outlets"), which is a separate
+  service. Gate: v1 has real evaluation numbers and the new claim has a defined
+  metric.
+
 ## Invariants
 
 These are correctness constraints, not style preferences. Each one is a silent
