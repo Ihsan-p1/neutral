@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: Lint
+        run: ruff check src tests
+      - name: Test
+        run: pytest -v
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t neutral:ci .
+
+      - name: Report image size
+        run: docker image inspect neutral:ci --format '{{.Size}}' | awk '{printf "image size: %.0f MB\n", $1/1024/1024}'
+
+      - name: Assert PyTorch is absent
+        run: |
+          # The single most important constraint in the spec: training deps
+          # must never reach the production image. torch + CUDA wheels are
+          # ~2.5 GB against ~40 MB for onnxruntime CPU.
+          if docker run --rm neutral:ci python -c "import torch" 2>/dev/null; then
+            echo "::error::PyTorch is present in the production image - Dockerfile is leaking"
+            exit 1
+          fi
+          echo "torch absent, as expected"
+
+      - name: Assert the container runs as non-root
+        run: |
+          uid=$(docker run --rm neutral:ci id -u)
+          if [ "$uid" = "0" ]; then
+            echo "::error::container runs as root"
+            exit 1
+          fi
+          echo "running as uid $uid"
+
+      - name: Assert PORT is honoured
+        run: |
+          # A hardcoded port would lock the image to a single platform.
+          docker run -d --name neutral-port -e PORT=9137 -p 9137:9137 neutral:ci
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:9137/health > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -sf http://localhost:9137/health > /dev/null
+          echo "custom PORT honoured"
+          docker rm -f neutral-port
+
+      - name: Smoke test
+        run: |
+          docker run -d --name neutral-ci -p 8000:8000 neutral:ci
+          start=$(date +%s)
+          for _ in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health > /dev/null; then break; fi
+            sleep 1
+          done
+          echo "startup took $(( $(date +%s) - start ))s"
+
+          curl -sf http://localhost:8000/health | tee health.json
+          grep -q '"status":"ok"' health.json
+
+          curl -sf -X POST http://localhost:8000/analyze \
+            -H 'Content-Type: application/json' \
+            -d '{"text":"The bill passed. The senator objected."}' | tee analyze.json
+          grep -q '"n_sentences":2' analyze.json
+
+          curl -sf http://localhost:8000/ -o ui.html
+          grep -qi gradio ui.html
+          echo "UI served on /"
+
+      - name: Assert article text never reaches the logs
+        run: |
+          # Logs travel wherever the platform sends them. User text must not.
+          docker logs neutral-ci > logs.txt 2>&1
+          if grep -q "The senator objected" logs.txt; then
+            echo "::error::article text leaked into the logs"
+            cat logs.txt
+            exit 1
+          fi
+          echo "no article text in logs"
+          cat logs.txt
+
+      - name: Tear down
+        if: always()
+        run: docker rm -f neutral-ci neutral-port 2>/dev/null || true
