@@ -115,13 +115,16 @@ src/neutral/  -> onnxruntime, tokenizers         (di dalam image)
 ```
 neutral/
 ├── src/neutral/
-│   ├── config.py      # pydantic-settings; seluruh konfigurasi via env
-│   ├── model.py       # sesi ONNX, batching, temperature scaling
-│   ├── segment.py     # pemecah artikel menjadi kalimat (pysbd)
-│   ├── schemas.py     # model request/response pydantic
-│   ├── api.py         # rute FastAPI
-│   ├── ui.py          # Gradio Blocks
-│   └── app.py         # menggabungkan Gradio ke FastAPI, satu proses
+│   ├── config.py         # pydantic-settings; seluruh konfigurasi via env
+│   ├── schemas.py        # model request/response pydantic
+│   ├── segment.py        # pemecah artikel menjadi kalimat (pysbd)
+│   ├── detect.py         # deteksi bahasa dan batas ukuran input
+│   ├── classifier.py     # sesi ONNX, backend stub, temperature scaling
+│   ├── pipeline.py       # segmentasi + klasifikasi + agregasi
+│   ├── logging_setup.py  # formatter JSON, membuang teks pengguna
+│   ├── api.py            # rute FastAPI dan rate limiting
+│   ├── ui.py             # Gradio Blocks
+│   └── app.py            # menggabungkan Gradio ke FastAPI, satu proses
 ├── training/
 │   ├── data.py        # loading, group split, pemeriksaan kebocoran
 │   ├── train.py
@@ -132,7 +135,7 @@ neutral/
 ├── docs/superpowers/specs/
 ├── Dockerfile
 ├── pyproject.toml
-├── uv.lock
+├── requirements.txt
 └── README.md
 ```
 
@@ -273,18 +276,18 @@ berhenti reproducible tanpa pemberitahuan.
 Multi-stage, dua tahap:
 
 ```dockerfile
-FROM python:3.11-slim AS builder
-# uv sync --frozen  -> venv deterministik dari uv.lock
+FROM python:3.13-slim AS builder
+# pip install -r requirements.txt -> venv dengan versi ter-pin
 # snapshot_download(revision="<commit-sha>")
 
-FROM python:3.11-slim
+FROM python:3.13-slim
 # salin venv dan model dari builder; pengguna non-root
 CMD uvicorn neutral.app:app --host 0.0.0.0 --port ${PORT:-8000}
 ```
 
 Tiga detail yang menentukan portabilitas:
 
-- **`python:3.11-slim`, bukan alpine.** musl memaksa numpy dan onnxruntime
+- **`python:3.13-slim`, bukan alpine.** musl memaksa numpy dan onnxruntime
   dibangun dari sumber; hasilnya image lebih besar dan build jauh lebih lama —
   kebalikan dari tujuan memakai alpine.
 - **`${PORT:-8000}`.** HF Spaces memberi 7860, Cloud Run dan Fly memberi 8080.
