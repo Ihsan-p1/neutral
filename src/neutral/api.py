@@ -39,6 +39,10 @@ def create_api(settings: Settings | None = None) -> FastAPI:
             api.state.classifier = load_classifier(settings)
         return api.state.classifier
 
+    # Exposed so the mounted UI shares this one loaded model instead of
+    # opening a second ONNX session.
+    api.state.get_classifier = get_classifier
+
     def too_large_handler(_request: Request, exc: Exception) -> JSONResponse:
         return JSONResponse(status_code=413, content={"detail": str(exc)})
 
