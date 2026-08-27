@@ -1,4 +1,12 @@
-from neutral.api import create_api
+import gradio as gr
 
-# Production entry point. The Gradio UI is mounted onto this app in ui.py.
-app = create_api()
+from neutral.api import create_api
+from neutral.config import get_settings
+from neutral.ui import build_ui
+
+settings = get_settings()
+
+# API and UI share one process, one port, and one loaded model: a single
+# container, a single thing to deploy.
+app = create_api(settings)
+app = gr.mount_gradio_app(app, build_ui(settings, app.state.get_classifier), path="/")
