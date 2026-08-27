@@ -165,6 +165,61 @@ def sweep(
     return best.lr
 
 
+def final_runs(
+    rows: list[Row],
+    folds: list[int],
+    lr: float,
+    done: dict[tuple[int, int, float], RunResult],
+) -> list[RunResult]:
+    """5 fold x 5 seed pada learning rate terpilih.
+
+    Bobot ditulis ke direktori per seed hanya untuk KEEP_FOLD; sisanya memakai
+    satu direktori scratch yang ditimpa terus. Puncak pemakaian disk sekitar
+    3,7 GB, bukan 18 GB (spec 3.3).
+    """
+    print()
+    print("== 25 run final ==")
+    results = []
+    for held_out in range(N_FOLDS):
+        for seed in range(N_SEEDS):
+            out_dir = (
+                CANDIDATE_DIR / f"seed{seed}" if held_out == KEEP_FOLD else SCRATCH_DIR
+            )
+            results.append(record_run(rows, folds, held_out, seed, lr, out_dir, done))
+            if held_out != KEEP_FOLD:
+                shutil.rmtree(SCRATCH_DIR, ignore_errors=True)
+    return results
+
+
+def keep_best_checkpoint(results: list[RunResult]) -> RunResult:
+    """Sisakan satu bobot: KEEP_FOLD, seed dengan validation loss terbaik.
+
+    Seleksi memakai validation loss dari fold val, bukan F1 dari fold test, jadi
+    fold yang dilaporkan tidak ikut memilih model (spec 3.3).
+    """
+    candidates = [result for result in results if result.held_out == KEEP_FOLD]
+    best = min(candidates, key=lambda result: result.val_loss)
+    source = CANDIDATE_DIR / f"seed{best.seed}" / "final"
+    if not source.exists():
+        print(f"CATATAN: {source} tidak ada, bobot tidak dipindahkan")
+        return best
+    MODEL_DIR.parent.mkdir(parents=True, exist_ok=True)
+    shutil.rmtree(MODEL_DIR, ignore_errors=True)
+    shutil.move(str(source), str(MODEL_DIR))
+    shutil.rmtree(CANDIDATE_DIR, ignore_errors=True)
+    (MODEL_DIR / "m2_selection.json").write_text(
+        json.dumps(dataclasses.asdict(best), indent=2), encoding="utf-8"
+    )
+    print()
+    print("== Checkpoint ==")
+    print(f"disimpan                    : {MODEL_DIR}")
+    print(
+        f"asal                        : held_out {best.held_out}, seed {best.seed}, "
+        f"val_loss {best.val_loss:.4f}"
+    )
+    return best
+
+
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
 
@@ -189,7 +244,9 @@ def main() -> None:
     done = load_runs(RUNS_PATH)
     if done:
         print(f"{len(done)} run sudah tercatat di {RUNS_PATH}, dilanjutkan")
-    sweep(rows, folds, done)
+    lr = sweep(rows, folds, done)
+    results = final_runs(rows, folds, lr, done)
+    keep_best_checkpoint(results)
 
 
 if __name__ == "__main__":
