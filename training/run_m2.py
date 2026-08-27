@@ -13,12 +13,13 @@ Keluaran dicetak ke stdout tanpa pembangkit laporan, mengikuti pola run_m1.py.
 import dataclasses
 import json
 import pathlib
+import shutil
 import sys
 from collections import Counter
 
 from training.data import Row, load_babe
 from training.split import group_split, train_val_test_folds
-from training.train import RunResult, token_length_percentiles
+from training.train import RunResult, run_one, token_length_percentiles
 
 N_FOLDS = 5
 N_SEEDS = 5
@@ -104,6 +105,66 @@ def describe_data(rows: list[Row], folds: list[int]) -> None:
         )
 
 
+def record_run(
+    rows: list[Row],
+    folds: list[int],
+    held_out: int,
+    seed: int,
+    lr: float,
+    out_dir: pathlib.Path,
+    done: dict[tuple[int, int, float], RunResult],
+) -> RunResult:
+    """Jalankan satu run bila belum tercatat, lalu simpan barisnya."""
+    key = (held_out, seed, lr)
+    if key in done:
+        print(f"lewati {key}, sudah tercatat")
+        return done[key]
+    result = run_one(rows, folds, held_out, seed, lr, out_dir=str(out_dir))
+    append_run(RUNS_PATH, result)
+    done[key] = result
+    print(
+        f"held_out {held_out} seed {seed} lr {lr:.0e}: "
+        f"F1 {result.f1_macro:.4f}, val_loss {result.val_loss:.4f}, "
+        f"stop di epoch {result.stopped_epoch:.0f}"
+    )
+    return result
+
+
+def sweep(
+    rows: list[Row], folds: list[int], done: dict[tuple[int, int, float], RunResult]
+) -> float:
+    """Pilih learning rate di satu fold, memakai validation loss.
+
+    Spec 3.1: pemilihan tidak boleh memakai F1 pada fold test. Fold test tidak
+    menyentuh keputusan apa pun sampai angka akhir dilaporkan.
+    """
+    print()
+    print("== Sweep learning rate ==")
+    results = [
+        record_run(rows, folds, KEEP_FOLD, 0, lr, CANDIDATE_DIR / f"sweep{i}", done)
+        for i, lr in enumerate(LEARNING_RATES)
+    ]
+    best = min(results, key=lambda result: result.val_loss)
+
+    # Run sweep yang menang adalah juga anggota grid final (KEEP_FOLD, seed 0, lr
+    # terpilih), dan grid akan melewatinya karena sudah tercatat. Bobotnya
+    # dipindahkan ke slot seed 0 sekarang, supaya retensi checkpoint di tahap
+    # berikutnya tidak kehilangan kandidat yang run-nya tidak diulang.
+    winner = CANDIDATE_DIR / f"sweep{LEARNING_RATES.index(best.lr)}"
+    seed_slot = CANDIDATE_DIR / "seed0"
+    if winner.exists():
+        shutil.rmtree(seed_slot, ignore_errors=True)
+        shutil.move(str(winner), str(seed_slot))
+    for index in range(len(LEARNING_RATES)):
+        shutil.rmtree(CANDIDATE_DIR / f"sweep{index}", ignore_errors=True)
+
+    for result in results:
+        mark = " <-" if result is best else ""
+        print(f"lr {result.lr:.0e}: val_loss {result.val_loss:.4f}{mark}")
+    print(f"learning rate terpilih      : {best.lr:.0e}")
+    return best.lr
+
+
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
 
@@ -124,6 +185,11 @@ def main() -> None:
         print()
         print("dry run selesai, GPU tidak disentuh")
         return
+
+    done = load_runs(RUNS_PATH)
+    if done:
+        print(f"{len(done)} run sudah tercatat di {RUNS_PATH}, dilanjutkan")
+    sweep(rows, folds, done)
 
 
 if __name__ == "__main__":
