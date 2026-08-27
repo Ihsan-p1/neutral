@@ -14,9 +14,11 @@ import dataclasses
 import json
 import pathlib
 import shutil
+import statistics
 import sys
 from collections import Counter
 
+from training.baseline_tfidf import run_baseline
 from training.data import Row, load_babe
 from training.split import group_split, train_val_test_folds
 from training.train import RunResult, run_one, token_length_percentiles
@@ -220,6 +222,89 @@ def keep_best_checkpoint(results: list[RunResult]) -> RunResult:
     return best
 
 
+# Spec 6: kriteria lulus ditetapkan sebelum satu run dijalankan, agar tidak
+# ditafsirkan setelah melihat angkanya.
+MIN_FOLD_WINS = 4
+MIN_MEAN_DELTA = 0.02
+
+
+def report(rows: list[Row], folds: list[int], results: list[RunResult]) -> bool:
+    """Cetak angka M2 dan uji kriteria berhenti terhadap baseline TF-IDF.
+
+    Baseline dihitung ulang di sini, bukan disalin dari catatan M1, supaya
+    perbandingannya dijamin berada di fold yang sama persis.
+    """
+    baseline = run_baseline(
+        [row.text for row in rows], [row.label for row in rows], folds, N_FOLDS
+    )
+    per_fold = {
+        held_out: [r.f1_macro for r in results if r.held_out == held_out]
+        for held_out in range(N_FOLDS)
+    }
+    all_scores = [r.f1_macro for r in results]
+
+    print()
+    print("== Hasil M2 ==")
+    print(
+        f"F1 macro DeBERTa            : {statistics.mean(all_scores):.4f} "
+        f"+/- {statistics.stdev(all_scores):.4f}  (n={len(all_scores)})"
+    )
+    print(
+        f"F1 macro baseline TF-IDF    : {statistics.mean(baseline):.4f} "
+        f"+/- {statistics.stdev(baseline):.4f}"
+    )
+    if abs(statistics.mean(baseline) - M1_BASELINE_MEAN) > 0.001:
+        print(
+            f"CATATAN: baseline bergeser dari {M1_BASELINE_MEAN} yang dicatat M1 — "
+            "fold atau filter data berubah, dan angka M2 tidak sebanding dengan M1"
+        )
+
+    print()
+    print("fold | DeBERTa mean +/- std | seed terburuk..terbaik | baseline | delta")
+    wins = 0
+    for held_out in range(N_FOLDS):
+        scores = per_fold[held_out]
+        delta = statistics.mean(scores) - baseline[held_out]
+        wins += delta > 0
+        print(
+            f"  {held_out}  | {statistics.mean(scores):.4f} +/- "
+            f"{statistics.stdev(scores):.4f}      | {min(scores):.4f}..{max(scores):.4f}"
+            f"        | {baseline[held_out]:.4f}   | {delta:+.4f}"
+        )
+
+    print()
+    print("== Sebaran, dipisah ==")
+    fold_means = [statistics.mean(per_fold[f]) for f in range(N_FOLDS)]
+    seed_spreads = [statistics.stdev(per_fold[f]) for f in range(N_FOLDS)]
+    print(f"std antar-fold (atas mean)  : {statistics.stdev(fold_means):.4f}")
+    print(f"std antar-seed (rerata)     : {statistics.mean(seed_spreads):.4f}")
+    print(
+        f"epoch berhenti              : {sorted({r.stopped_epoch for r in results})}"
+    )
+
+    mean_delta = statistics.mean(all_scores) - statistics.mean(baseline)
+    passed = wins >= MIN_FOLD_WINS and mean_delta >= MIN_MEAN_DELTA
+    print()
+    print("== Kriteria berhenti M2 (spec 6) ==")
+    print(
+        f"menang di fold              : {wins} dari {N_FOLDS}, minimal {MIN_FOLD_WINS}"
+    )
+    print(f"delta mean                  : {mean_delta:+.4f}, minimal {MIN_MEAN_DELTA}")
+    if passed:
+        print("LULUS. Lanjut ke M3 (baseline NELA).")
+    else:
+        print(
+            "GAGAL. PRD 9: berhenti dan periksa kualitas data, jangan menambah "
+            "sweep. Angka di atas tetap dilaporkan apa adanya."
+        )
+    print()
+    print(
+        "Target 0,78 di PRD 8.1 dihitung pada split resmi BABE yang bocor "
+        "(spec M1 6.1), jadi ia rujukan literatur, bukan ambang yang setara."
+    )
+    return passed
+
+
 def main() -> None:
     dry_run = "--dry-run" in sys.argv
 
@@ -247,6 +332,7 @@ def main() -> None:
     lr = sweep(rows, folds, done)
     results = final_runs(rows, folds, lr, done)
     keep_best_checkpoint(results)
+    report(rows, folds, results)
 
 
 if __name__ == "__main__":
