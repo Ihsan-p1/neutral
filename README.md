@@ -32,6 +32,40 @@ Menjalankan test:
 .venv/Scripts/python.exe -m ruff check src tests
 ```
 
+## Menjalankan lewat Docker
+
+```bash
+docker build -t neutral .
+docker run --rm -p 8000:8000 neutral
+```
+
+Port dibaca dari `$PORT`, sehingga image yang sama berjalan di HF Spaces (7860),
+Cloud Run dan Fly (8080), atau VPS mana pun tanpa perubahan:
+
+```bash
+docker run --rm -e PORT=7860 -p 7860:7860 neutral
+```
+
+## Arsitektur
+
+Tiga batas menopang sebagian besar desain:
+
+**Training terpisah dari serving.** `training/` memakai PyTorch; `src/neutral/`
+hanya memakai onnxruntime. `.dockerignore` mengecualikan `training/`, dan CI
+memastikan `import torch` gagal di dalam image. Selisihnya sekitar 2,5 GB
+berbanding 40 MB — itulah pembeda antara image yang siap melayani di bawah 10
+detik dan yang tidak.
+
+**Classifier berada di balik satu interface dengan dua implementasi.**
+`StubClassifier` bersifat deterministik dan membuat seluruh pipeline, API, UI,
+dan CI dapat berjalan sebelum ada bobot model. `OnnxClassifier` adalah jalur
+produksi. Ketika bobot siap, satu-satunya perubahan di sisi serving adalah
+menyetel `NEUTRAL_MODEL_BACKEND=onnx`.
+
+**`pipeline.py` memuat logika analisis; `api.py` hanya menangani HTTP.**
+Antarmuka Gradio memanggil fungsi `analyze()` yang sama dengan yang dipanggil
+endpoint, sehingga keduanya tidak dapat berbeda perilaku.
+
 ## Konfigurasi
 
 Seluruh konfigurasi dibaca dari environment variable berawalan `NEUTRAL_`.
