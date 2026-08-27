@@ -243,10 +243,21 @@ mencerminkan kemampuan generalisasi apa pun.
 
 Ketentuan:
 
-- Split dilakukan **per `article_id`**, idealnya juga stratified per outlet
+- Split dilakukan **per artikel sumber**. BABE tidak memiliki kolom
+  `article_id`; penanda artikel yang tersedia adalah `news_link`, dan kunci grup
+  diturunkan darinya
+- `news_link` dinormalisasi lebih dulu: query string, fragment, dan trailing
+  slash dibuang, skema dan host di-lowercase. Tanpa itu satu artikel yang muncul
+  dengan parameter tracking berbeda terpecah menjadi beberapa grup. Terukur pada
+  2026-08-27: normalisasi menyatukan 21 grup, dari 2.240 menjadi 2.219
+- Baris tanpa `news_link` dibuang, bukan digabung menjadi satu grup —
+  menggabungkan justru menciptakan grup palsu. Ada 32 baris seperti itu
 - Gunakan group-aware CV, bukan `train_test_split` biasa
-- Sertakan satu test yang secara eksplisit memverifikasi tidak ada `article_id`
+- Sertakan satu test yang secara eksplisit memverifikasi tidak ada kunci grup
   yang muncul di dua fold berbeda
+- **Split resmi train/test BABE tidak dipakai.** Diperiksa pada 2026-08-27: 384
+  dari 2.151 kunci grup muncul di kedua sisi split resmi sekaligus. Fold dibuat
+  sendiri dari gabungan kedua split
 
 Ini poin terpenting di seluruh bagian data. Angka yang dihasilkan tanpa
 pengamanan ini tidak layak dilaporkan.
@@ -450,9 +461,9 @@ Gunakan **BABE** sebagai dataset latih utama, menggantikan MBIC. Alasannya:
 lisensi MBIC tidak eksplisit di paper aslinya, sementara BABE adalah superset
 yang expert-annotated dengan distribusi HuggingFace yang lebih jelas. BASIL
 tetap sebagai cross-dataset test.
-*Satu-satunya verifikasi tersisa:* buka dataset card BABE di HuggingFace untuk
-memastikan term lisensinya sebelum repo dipublikasikan. Ini pekerjaan lima
-menit, bukan open question.
+*Verifikasi lisensi sudah dilakukan pada 2026-08-27:* dataset card BABE di
+HuggingFace tetap tidak menyatakan lisensi apa pun. Pengamanannya karena itu
+tidak berubah — tidak ada redistribusi, sesuai bagian 5.0.
 MBIB (Wessel et al., 2023) dicatat sebagai opsi perluasan evaluasi, tidak
 dipakai di v1.
 

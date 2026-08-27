@@ -126,7 +126,8 @@ neutral/
 │   ├── ui.py             # Gradio Blocks
 │   └── app.py            # menggabungkan Gradio ke FastAPI, satu proses
 ├── training/
-│   ├── data.py        # loading, group split, pemeriksaan kebocoran
+│   ├── split.py       # derivasi kunci grup dan fold; stdlib saja
+│   ├── data.py        # loading, filter kualitas
 │   ├── train.py
 │   ├── calibrate.py   # temperature scaling
 │   ├── evaluate.py
@@ -142,6 +143,11 @@ neutral/
 Pemisahan `src/` dan `training/` bukan sekadar kerapian. Dockerfile hanya
 menyalin `src/`, sehingga dependensi training tidak mungkin bocor ke image
 produksi tanpa disengaja.
+
+`split.py` dipisahkan dari `data.py` setelah implementasi: fungsi split harus
+dapat diimpor tanpa menarik `datasets`, agar test anti-kebocoran ikut berjalan di
+CI. Alasan lengkapnya ada di
+`docs/superpowers/specs/2026-08-27-training-phase-design.md` bagian 3.2.
 
 ### 3.3 Alur permintaan
 

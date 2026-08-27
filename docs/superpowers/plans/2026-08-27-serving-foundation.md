@@ -1527,7 +1527,9 @@ git push
 Tugas berikut tidak dapat dikerjakan di mesin ini dan akan menjadi rencana
 tersendiri:
 
-- `training/data.py` — loading BABE, group split per artikel, test anti-kebocoran
+- `training/split.py` dan `training/data.py` — loading BABE, group split per
+  artikel sumber lewat `news_link`, test anti-kebocoran. Sudah dikerjakan; lihat
+  `docs/superpowers/plans/2026-08-27-training-m1-data-foundation.md`
 - `training/train.py` — fine-tune DeBERTa, sweep learning rate, 5 seed
 - `training/calibrate.py` — temperature scaling, ECE dengan bootstrap CI
 - `training/evaluate.py` — cross-dataset BASIL, korelasi outlet, error analysis

@@ -21,19 +21,29 @@ the code alone.
 
 ## Current state
 
-The serving layer is finished and runs end to end on the stub backend: 49 tests
+The serving layer is finished and runs end to end on the stub backend: 60 tests
 pass, ruff is clean, and the container definition and CI pipeline are written.
 No model has been trained yet, so every number the running app reports is
 meaningless — see "Switching to the trained model" below.
 
-`training/` and `models/` do not exist yet. Both are already named in
-`.dockerignore` and in the architecture notes below in anticipation of the
-training phase, which is the work that remains.
+M1 of the training phase is done. `training/` holds `split.py`, `data.py`,
+`baseline_tfidf.py`, and `run_m1.py`; the plan is
+`docs/superpowers/plans/2026-08-27-training-m1-data-foundation.md` and the design
+is `docs/superpowers/specs/2026-08-27-training-phase-design.md`. `models/` still
+does not exist.
 
-Work has moved to a second Windows machine, and this one has a GPU. The
-serving code is unchanged, but nothing is checked out ready to run: there is no
-`.venv/` here, and the Python on `PATH` is 3.10 while `pyproject.toml` requires
-3.13. See "Commands" for the setup step.
+Three M1 results carry into everything after it:
+
+- **BABE's own train/test split leaks.** 384 of 2,151 group keys appear on both
+  sides. Fold assignment is built from the pooled data instead, so this project's
+  numbers are not directly comparable to figures computed on the official split.
+- **TF-IDF baseline is F1 macro 0.7420 +/- 0.0194** over 5 folds. PRD 8.1 targets
+  0.78 for the fine-tuned model, so the margin M2 has to clear is about 0.04.
+- **3,874 of 4,121 rows survive filtering**: 32 dropped for a missing
+  `news_link`, 215 for low annotator agreement, 0 for an unexpected label.
+
+M2 (fine-tuning DeBERTa) has no plan document yet. Write one before starting it,
+using the M1 numbers above.
 
 ## Commands
 
@@ -45,6 +55,14 @@ which is why it is used here even though `requirements.txt` remains the pin:
 ```bash
 uv venv --python 3.13 .venv
 uv pip install --python .venv/Scripts/python.exe -r requirements-dev.txt
+```
+
+The training side has its own venv, so torch never reaches the serving one:
+
+```bash
+uv venv --python 3.13 .venv-train
+uv pip install --python .venv-train/Scripts/python.exe -r training/requirements-train.txt
+.venv-train/Scripts/python.exe -m training.run_m1          # M1 report
 ```
 
 ```bash
@@ -87,6 +105,10 @@ uses only onnxruntime and tokenizers. `.dockerignore` excludes `training/` and
 plus CUDA wheels are ~2.5 GB against ~40 MB for onnxruntime CPU — this is the
 difference between an image that starts in under 10 seconds and one that does
 not.
+
+The two venvs carry the same separation locally: serving lives in `.venv/` and
+training in `.venv-train/`, so `import torch` fails in the serving venv rather
+than only failing in CI.
 
 **The classifier sits behind a small interface with two implementations.**
 `StubClassifier` is deterministic (SHA-256 of the sentence mapped to logits) and
@@ -179,6 +201,14 @@ failure if broken — nothing raises.
   probability. It is length-normalized so short and long articles compare
   directly. Always surface `n_sentences` alongside it — a proportion over few
   sentences is unreliable, and the API emits a `too_short` warning below 5.
+- **`training/split.py` imports only stdlib.** `tests/test_split.py` imports it,
+  and those tests run in CI with `requirements-dev.txt` alone. Adding a
+  `datasets`, `pandas`, `sklearn`, `torch`, or `numpy` import there breaks CI —
+  a test asserts the import set.
+- **Fold assignment is grouped by article URL, never by row.** BABE has no
+  `article_id`; the key is a normalised `news_link`. A random split puts
+  neighbouring sentences from one article in train and test at once, which
+  inflates F1 and measures nothing. `run_m1.py` asserts this rather than warning.
 - **The port is read from `$PORT`.** HF Spaces uses 7860; Cloud Run and Fly use
   8080. A hardcoded port locks the image to one platform.
 - **Non-English input is flagged, never rejected.** Text under 40 characters is

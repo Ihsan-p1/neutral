@@ -222,6 +222,57 @@ ukuran dataset efektif turun dan itu mempengaruhi ekspektasi F1.
 
 ---
 
+### 6.4 Hasil, diukur pada 2026-08-27
+
+Dijalankan lewat `.venv-train/Scripts/python.exe -m training.run_m1`.
+
+```
+baris mentah                : 4.121
+dibuang, news_link kosong   : 32
+dibuang, agreement rendah   : 215
+dibuang, label di luar 0/1  : 0
+dipakai                     : 3.874
+distribusi                  : 2.117 biased (54,6%), 1.757 neutral (45,4%)
+news_link distinct          : 2.240  ->  2.219 setelah normalisasi
+grup setelah filter         : 2.151
+outlet distinct             : 18
+lean                        : 1.431 None, 902 right, 884 left, 657 center
+ukuran fold                 : 751, 883, 743, 770, 727
+F1 macro baseline           : 0,7420 +/- 0,0194
+```
+
+Jawaban atas ketiga pertanyaan:
+
+**6.1 — split resmi BABE bocor.** 384 dari 2.151 kunci grup muncul di sisi train
+dan test resmi sekaligus. Cabang yang sudah ditetapkan berlaku: split resmi
+dibuang, fold dibuat sendiri dari pool gabungan, dan konsekuensinya dicatat.
+
+Yang boleh dan tidak boleh disimpulkan dari angka ini perlu dipisahkan. Yang
+terukur adalah bahwa split yang didistribusikan di HuggingFace tidak bersih
+terhadap `news_link`. Yang **tidak** terukur adalah bagaimana angka di paper BABE
+dihasilkan — penulisnya bisa saja memakai skema split lain. Karena itu
+pernyataan yang layak masuk README adalah bahwa angka project ini dihitung pada
+fold yang group-clean dan tidak dapat dibandingkan langsung dengan angka mana pun
+yang dihitung pada split resmi, bukan tuduhan bahwa angka literatur keliru.
+
+**6.2 — `label` hanya bernilai 0 dan 1.** Tidak ada tindakan; 0 baris dibuang
+karena label tak terduga.
+
+**6.3 — 18 outlet, di atas ambang 12.** Analisis korelasi outlet PRD 8.3 tetap
+dapat dijalankan, dengan dua catatan yang baru terlihat di sini: distribusinya
+sangat berat di tiga outlet teratas (Breitbart 904, Reuters 809, Alternet 748 —
+64% dari seluruh baris), dan kolom `type` yang menjadi sumber lean kosong pada
+1.431 baris, yaitu 37%. Keduanya menyusutkan n efektif untuk 8.3 dan harus
+dilaporkan bersama nilai korelasinya.
+
+Satu angka lain yang mengubah rencana M2: baseline TF-IDF sudah mencapai 0,7420,
+sementara target PRD 8.1 untuk model yang di-fine-tune adalah 0,78. Margin yang
+harus dilewati M2 karena itu hanya sekitar 0,04 — jauh lebih sempit daripada yang
+tersirat saat kriteria berhenti M2 ditulis, dan itu perlu diperhitungkan saat
+memutuskan apa yang dianggap "mengungguli baseline secara meyakinkan".
+
+---
+
 ## 7. Baseline TF-IDF
 
 TF-IDF pada kata, diikuti logistic regression, dievaluasi pada fold yang sama
