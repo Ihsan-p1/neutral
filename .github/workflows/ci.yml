@@ -30,7 +30,9 @@ jobs:
         run: docker build -t neutral:ci .
 
       - name: Report image size
-        run: docker image inspect neutral:ci --format '{{.Size}}' | awk '{printf "image size: %.0f MB\n", $1/1024/1024}'
+        run: |
+          bytes=$(docker image inspect neutral:ci --format '{{.Size}}')
+          echo "image size $(( bytes / 1024 / 1024 )) MB"
 
       - name: Assert PyTorch is absent
         run: |
