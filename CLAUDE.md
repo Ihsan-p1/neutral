@@ -23,14 +23,14 @@ the code alone.
 
 The serving layer is finished and runs end to end on the stub backend: 60 tests
 pass, ruff is clean, and the container definition and CI pipeline are written.
-No model has been trained yet, so every number the running app reports is
-meaningless — see "Switching to the trained model" below.
+A trained DeBERTa checkpoint now exists in `models/deberta-babe`, but nothing
+serves it yet: there is no ONNX export, so every number the running app reports
+is still meaningless — see "Switching to the trained model" below.
 
 M1 of the training phase is done. `training/` holds `split.py`, `data.py`,
 `baseline_tfidf.py`, and `run_m1.py`; the plan is
 `docs/superpowers/plans/2026-08-27-training-m1-data-foundation.md` and the design
-is `docs/superpowers/specs/2026-08-27-training-phase-design.md`. `models/` still
-does not exist.
+is `docs/superpowers/specs/2026-08-27-training-phase-design.md`.
 
 Three M1 results carry into everything after it:
 
@@ -48,25 +48,33 @@ or a rebase, not a squash: the one-commit-per-task mapping is what the plan is
 checked against. That Linux CI run is also the only evidence `tests/test_split.py`
 passes off Windows.
 
-M2 (fine-tuning DeBERTa) has a design spec but no plan document yet:
-`docs/superpowers/specs/2026-08-28-training-m2-finetune-design.md`. Work happens
-on `training-m2`, branched from `training-m1` because `main` still has no
-`training/` directory until PR #1 merges.
+M2 (fine-tuning DeBERTa) is done. The design is
+`docs/superpowers/specs/2026-08-28-training-m2-finetune-design.md` and the plan is
+`docs/superpowers/plans/2026-08-28-training-m2-finetune.md`. `training/` gained
+`train.py` (one run) and `run_m2.py` (orchestration of 27 runs). Work happens on
+`training-m2`, branched from `training-m1` because `main` still has no `training/`
+directory until PR #1 merges.
 
-Four M2 decisions are already closed there and are not re-openable by reading the
-code:
+Four M2 results carry forward:
 
-- **28 runs, not 75.** The LR sweep (1e-5/2e-5/3e-5) runs on fold 0 only; the
-  chosen rate then runs 5 folds x 5 seeds. LR is selected on validation loss, so
-  no test fold ever influences a choice.
-- **Validation set is the neighbouring fold** (`held_out=i` uses fold `i+1`), so
-  the M1 group-clean folds carry over with no new split code.
-- **One checkpoint survives**, from fold 0 at the seed with the best validation
-  loss. Seed averaging is a reporting device, not the shipped model: serving loads
-  a single ONNX file.
-- **The M2 stop criterion is a number.** DeBERTa must win on at least 4 of 5
-  folds and beat 0.7420 by 0.02. Below that, PRD 9 applies: stop and check data
-  quality, do not keep tuning.
+- **DeBERTa is F1 macro 0.8477 +/- 0.0277** over 25 runs (5 folds x 5 seeds) at
+  learning rate 3e-5, against the TF-IDF baseline's 0.7420 +/- 0.0194 on the same
+  folds. The stop criterion passed on both halves: 5 fold wins of 5, mean delta
+  +0.1058. Spec section 12 has the per-fold table.
+- **Spread between folds (0.0195) and between seeds (0.0187) is about equal.** Any
+  later comparison run on one fold with one seed measures noise as large as the
+  fold effect. Fold 2 is the weakest and least stable (0.8184 +/- 0.0453).
+- **The checkpoint is `models/deberta-babe`**, from fold 0 at seed 3
+  (validation loss 0.3331), with `m2_selection.json` beside it and every run in
+  `runs/m2_runs.jsonl`. Both directories are gitignored. Seed averaging stays a
+  reporting device: serving loads a single ONNX file.
+- **transformers 5.16.1 forced three code details** that look arbitrary otherwise:
+  `warmup_ratio` no longer exists so the 0.06 ratio is converted to
+  `warmup_steps` off max epochs, `from_pretrained` needs an explicit
+  `dtype=torch.float32` because the deberta-v3 checkpoint ships fp16 and breaks
+  `GradScaler`, and `accelerate` is a hard `Trainer` dependency.
+
+Next is M3 (NELA baseline), not more tuning.
 
 ## Commands
 
@@ -86,6 +94,9 @@ The training side has its own venv, so torch never reaches the serving one:
 uv venv --python 3.13 .venv-train
 uv pip install --python .venv-train/Scripts/python.exe -r training/requirements-train.txt
 .venv-train/Scripts/python.exe -m training.run_m1          # M1 report
+.venv-train/Scripts/python.exe -m training.train           # harness self-check
+.venv-train/Scripts/python.exe -m training.run_m2 --dry-run  # folds only, no GPU
+.venv-train/Scripts/python.exe -m training.run_m2          # 27 runs, ~2 h, resumable
 uv pip freeze --python .venv-train/Scripts/python.exe     # re-pin; uv venv has no pip
 ```
 
@@ -263,6 +274,6 @@ Conventional-commit prefixes: `feat:`, `fix:`, `chore:`, `docs:`, `ci:`, `test:`
 Work proceeds one plan task at a time: implement, run the tests named in the
 task, then commit. Do not batch several tasks into one commit.
 
-The serving-foundation plan is fully executed. The training phase has no plan
-document yet — write one before starting it, rather than working from the
-deferred-task list at the end of the old plan.
+The serving-foundation, M1, and M2 plans are fully executed. M3 has no plan
+document yet: write a design spec and a plan before starting it, the same way M1
+and M2 were done.

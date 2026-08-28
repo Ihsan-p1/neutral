@@ -358,3 +358,66 @@ pekerjaan berikutnya: pemeriksaan kualitas data, bukan M3.
 - Contrast set dan analisis shortcut learning (M4b)
 - Perubahan apa pun pada `src/neutral/` dan pada `Dockerfile`
 - Stratifikasi per outlet, kecuali bila hasil per fold membuktikan perlu
+
+---
+
+## 12. Hasil, diukur pada 28 Agustus 2026
+
+Dijalankan lewat `.venv-train/Scripts/python.exe -m training.run_m2`. 27 run
+tanpa interupsi, semuanya tercatat di `runs/m2_runs.jsonl`.
+
+```
+learning rate terpilih      : 3e-5  (val_loss 0,3580 / 0,3539 / 0,3530 untuk 1e-5 / 2e-5 / 3e-5)
+F1 macro DeBERTa            : 0,8477 +/- 0,0277  (25 run)
+F1 macro baseline TF-IDF    : 0,7420 +/- 0,0194  (dihitung ulang pada fold yang sama)
+per fold, DeBERTa vs baseline:
+  fold 0   0,8693 +/- 0,0106   vs 0,7445   delta +0,1248
+  fold 1   0,8397 +/- 0,0183   vs 0,7095   delta +0,1302
+  fold 2   0,8184 +/- 0,0453   vs 0,7449   delta +0,0735
+  fold 3   0,8550 +/- 0,0143   vs 0,7614   delta +0,0936
+  fold 4   0,8563 +/- 0,0050   vs 0,7496   delta +0,1067
+std antar-fold              : 0,0195
+std antar-seed              : 0,0187
+epoch berhenti              : 3 atau 4; tidak ada run yang mencapai epoch 5
+menang di fold              : 5 dari 5
+delta mean                  : +0,1058
+checkpoint disimpan         : models/deberta-babe, dari held_out 0 seed 3, val_loss 0,3331
+```
+
+**Kriteria bagian 6: LULUS.** Kedua syarat terlampaui dengan jarak jauh: menang di
+5 fold dari 5 dengan batas 4, dan delta mean +0,1058 dengan batas 0,02. Baseline
+yang dihitung ulang persis sama dengan angka M1 (0,7420 +/- 0,0194), jadi
+pembagian fold benar-benar terreproduksi dan kedua angka diukur pada data yang
+sama. Yang terukur di sini hanya satu hal: F1 macro pada fold BABE yang bersih
+grup. Generalisasi lintas dataset (BASIL, M4a), kalibrasi dan ECE (M4b), serta
+held-out berita terbaru belum diukur sama sekali, dan angka 0,8477 tidak
+mengatakan apa pun tentang ketiganya.
+
+Dua hal yang perlu dibaca bersama angkanya. Pertama, std antar-fold (0,0195) dan
+std antar-seed (0,0187) hampir sama besar, jadi satu run pada satu fold akan
+menyembunyikan setengah dari sebaran yang ada; 25 run bukan kemewahan. Kedua,
+fold 2 adalah fold terburuk sekaligus paling tidak stabil (0,8184 +/- 0,0453,
+rentang seed 0,7626 sampai 0,8607), dan delta terkecil ada di sana. Deltanya tetap
+jauh di atas 0,02, tetapi bila nanti ada fold yang gagal, fold 2 kandidat pertama
+yang diperiksa.
+
+Pemilihan learning rate nyaris seri: tiga val_loss berjarak kurang dari 0,006. Yang
+perlu dicatat, 1e-5 justru memberi F1 test tertinggi pada run sweep (0,8812 lawan
+0,8540 untuk 3e-5). Pemilihan tetap memakai validation loss sesuai bagian 3.1, jadi
+fold test tidak ikut memilih apa pun. Bila suatu saat angka ini dipertanyakan,
+inilah tempat pertanyaannya: 3e-5 menang karena validation loss, bukan karena test.
+
+**Deviasi dari bagian 3.4 saat dijalankan:** tidak ada pada sisi hyperparameter.
+Batch 16 dengan fp16 muat di 6 GB VRAM, jadi fallback batch 8 dengan accum 2 tidak
+dipakai. Tiga penyesuaian lain dipaksa oleh transformers 5.16.1 dan tidak mengubah
+nilai apa pun di bagian 3.4:
+
+- `warmup_ratio` sudah tidak ada. Rasio 0,06 dihitung menjadi `warmup_steps` dari
+  ukuran train dikali epoch maksimum, bukan epoch aktual, supaya early stopping
+  tidak mengubah jadwal learning rate antar run.
+- `from_pretrained` memuat bobot dengan dtype checkpoint, dan checkpoint
+  deberta-v3-base berisi fp16. Parameter fp16 membuat `GradScaler` gagal dengan
+  "Attempting to unscale FP16 gradients", jadi `dtype=torch.float32` dinyatakan
+  eksplisit. Mixed precision tetap aktif lewat `fp16=True`.
+- `accelerate` adalah dependency wajib `Trainer`, bukan opsional. Dipin 1.14.0 di
+  `training/requirements-train.txt`.
