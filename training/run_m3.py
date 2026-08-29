@@ -26,7 +26,7 @@ from sklearn.preprocessing import StandardScaler
 
 from training.baseline_tfidf import run_baseline
 from training.data import load_babe
-from training.nela import extract_features, group_map
+from training.nela import GROUP_SIZES, GROUPS, extract_features, group_map
 from training.split import group_split
 
 N_FOLDS = 5
@@ -245,6 +245,45 @@ def main() -> None:
     print()
     print(f"kolom NELA bertahan         : {span} dari {features.shape[1]}")
     print(f"run DeBERTa yang dirata2    : {n_runs} pada lr={FINAL_LR}")
+
+    print()
+    print("== Breakdown per grup fitur ==")
+    print("grup       | fitur | bertahan | F1 macro")
+    columns = {
+        group: [i for i, name in enumerate(names) if mapping[name] == group]
+        for group in GROUPS
+    }
+    for group in GROUPS:
+        assert len(columns[group]) == GROUP_SIZES[group], (
+            f"grup {group}: {len(columns[group])} kolom, bukan {GROUP_SIZES[group]}"
+        )
+        group_scores, group_kept = score_nela(features[:, columns[group]], labels, folds)
+        group_span = (
+            f"{min(group_kept)}"
+            if min(group_kept) == max(group_kept)
+            else f"{min(group_kept)}..{max(group_kept)}"
+        )
+        print(
+            f"{group:<10} | {len(columns[group]):>5} | {group_span:>8} | "
+            f"{statistics.mean(group_scores):.4f} +/- "
+            f"{statistics.stdev(group_scores):.4f}"
+        )
+
+    print()
+    print("== Catatan pembacaan (spec M3 7.2) ==")
+    print(
+        f"Std DeBERTa mencampur sebaran antar-fold dan antar-seed dari {n_runs} run."
+    )
+    print(
+        "Std ketiga model logistic regression hanya sebaran antar-fold dari 5 run, "
+        "karena lbfgs pada data tetap bersifat deterministik dan seed tidak "
+        "menghasilkan variasi apa pun."
+    )
+    print(
+        "Kedua angka itu tidak sebanding sebagai ukuran ketidakpastian. Yang "
+        "sebanding adalah mean per fold, karena keempatnya dihitung pada pembagian "
+        "data yang sama, jadi delta antar-model dibaca dari mean itu."
+    )
 
 
 if __name__ == "__main__":
