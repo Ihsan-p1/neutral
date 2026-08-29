@@ -74,7 +74,33 @@ Four M2 results carry forward:
   `dtype=torch.float32` because the deberta-v3 checkpoint ships fp16 and breaks
   `GradScaler`, and `accelerate` is a hard `Trainer` dependency.
 
-Next is M3 (NELA baseline), not more tuning.
+M3 (NELA baseline) is done. The design is
+`docs/superpowers/specs/2026-08-29-training-m3-nela-design.md` and the plan is
+`docs/superpowers/plans/2026-08-29-training-m3-nela.md`. `training/` gained
+`nela.py` (extraction and cache) and `run_m3.py` (45 logistic regression fits).
+Work happens on `training-m3`, branched from `training-m2` for the same reason M2
+branched from M1.
+
+Four M3 results carry forward:
+
+- **DeBERTa's advantage does not come from surface features.** NELA + logistic
+  regression is F1 macro 0.6837 +/- 0.0116, which is 0.0583 *below* the TF-IDF
+  baseline and 0.1640 below DeBERTa. Concatenating NELA onto TF-IDF gives 0.7294,
+  also below TF-IDF alone, so the features are not strong-but-redundant; they are
+  weak at sentence length. Spec section 11 has both tables.
+- **The signal that exists sits in one group.** Style alone reaches 0.6599 on 40
+  surviving columns against 0.6837 for all 87 features. `event` returns 0.4401,
+  about 0.09 above a constant predictor, while costing 92% of extraction time.
+  Anything that ever considers NELA for serving needs style and nothing else.
+- **`nela-features==3.0.1` returns 87 features, not the 141 the PRD claimed.**
+  Style 50, complexity 7, bias 8, affect 9, moral 11, event 2. PRD 6.1 and 12.2
+  are corrected; 141 stays in the text as the Horne et al. 2018 paper figure.
+- **`data/nela_cache.npz` is keyed on a SHA-256 hash of the text list.**
+  Extraction costs 46 minutes for 3,874 rows, so it is paid once. Any change to
+  `load_babe()`'s filters produces a different key and re-extracts, rather than
+  silently reusing a matrix built from different rows. The file is gitignored.
+
+Next is M4a (cross-dataset eval on BASIL), which has no design or plan yet.
 
 ## Commands
 
@@ -97,6 +123,8 @@ uv pip install --python .venv-train/Scripts/python.exe -r training/requirements-
 .venv-train/Scripts/python.exe -m training.train           # harness self-check
 .venv-train/Scripts/python.exe -m training.run_m2 --dry-run  # folds only, no GPU
 .venv-train/Scripts/python.exe -m training.run_m2          # 27 runs, ~2 h, resumable
+.venv-train/Scripts/python.exe -m training.nela            # nela.py self-check
+.venv-train/Scripts/python.exe -m training.run_m3          # M3 report, 46 min first run
 uv pip freeze --python .venv-train/Scripts/python.exe     # re-pin; uv venv has no pip
 ```
 
@@ -274,6 +302,6 @@ Conventional-commit prefixes: `feat:`, `fix:`, `chore:`, `docs:`, `ci:`, `test:`
 Work proceeds one plan task at a time: implement, run the tests named in the
 task, then commit. Do not batch several tasks into one commit.
 
-The serving-foundation, M1, and M2 plans are fully executed. M3 has no plan
-document yet: write a design spec and a plan before starting it, the same way M1
-and M2 were done.
+The serving-foundation, M1, M2, and M3 plans are fully executed. M4a has no plan
+document yet: write a design spec and a plan before starting it, the same way M1,
+M2, and M3 were done.

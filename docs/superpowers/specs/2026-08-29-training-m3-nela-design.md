@@ -295,3 +295,71 @@ bahwa cakupan tidak melebar.
 - Cross-dataset eval ke BASIL (M4a)
 - Temperature scaling, ECE, ablation shortcut learning, contrast set (M4b)
 - Ekspor ONNX dan uji paritas (M5)
+
+---
+
+## 11. Hasil yang terukur
+
+Diukur 2026-08-29 pada 3.874 baris, fold `[751, 883, 743, 770, 727]`, dari
+`training/run_m3.py`. Baseline TF-IDF hasil hitung ulang persis 0,7420 +/- 0,0194,
+sama dengan angka M1, jadi pembagian fold tidak bergeser dan keempat kolom di
+bawah dihitung pada data yang sama.
+
+### 11.1 Empat model
+
+| Model | F1 macro | Delta TF-IDF | Per fold |
+|---|---|---|---|
+| TF-IDF + LR | 0,7420 +/- 0,0194 | +0,0000 | 0,7445 0,7095 0,7449 0,7614 0,7496 |
+| NELA + LR | 0,6837 +/- 0,0116 | -0,0583 | 0,6960 0,6712 0,6802 0,6753 0,6959 |
+| TF-IDF + NELA + LR | 0,7294 +/- 0,0130 | -0,0126 | 0,7252 0,7163 0,7405 0,7193 0,7455 |
+| DeBERTa | 0,8477 +/- 0,0195 | +0,1058 | 0,8693 0,8397 0,8184 0,8550 0,8563 |
+
+Kolom NELA yang bertahan setelah pembuangan varians-nol: 76 dari 87, sama di
+kelima fold. Kolom DeBERTa dirata-ratakan dari 25 run pada `lr=3e-05`, dibaca
+dari `runs/m2_runs.jsonl`.
+
+### 11.2 Enam grup fitur
+
+| Grup | Fitur | Bertahan | F1 macro |
+|---|---|---|---|
+| style | 50 | 40 | 0,6599 +/- 0,0089 |
+| affect | 9 | 9 | 0,6194 +/- 0,0211 |
+| bias | 8 | 8 | 0,5884 +/- 0,0240 |
+| complexity | 7 | 7 | 0,5382 +/- 0,0375 |
+| moral | 11 | 11 | 0,5028 +/- 0,0310 |
+| event | 2 | 1 | 0,4401 +/- 0,0175 |
+
+Lantai perbandingannya: prediktor konstan pada data ini memberi F1 macro 0,3534
+bila selalu menebak `biased` dan 0,3120 bila selalu `neutral`.
+
+### 11.3 Bacaan
+
+**Keunggulan DeBERTa tidak datang dari fitur permukaan.** NELA tertinggal 0,0583
+di bawah TF-IDF dan 0,1640 di bawah DeBERTa. Hitungan kata kerja factive, hedge,
+dan kata bias tidak menjelaskan selisih yang diukur M2.
+
+**Konfigurasi gabungan menutup kemungkinan kedua.** Bagian 3.1 menyebut dua
+bacaan yang tidak bisa dipisahkan tanpa matriks gabungan: fitur linguistik memang
+lemah, atau fitur itu kuat tetapi tumpang tindih dengan sinyal yang sudah
+ditangkap bag-of-words. Jawabannya yang pertama. Menyambung 76 kolom NELA ke
+TF-IDF bukan hanya tidak menambah apa pun, tetapi menurunkan angkanya 0,0126.
+Kolom padat yang distandardisasi ikut menarik bobot dari ribuan kolom TF-IDF yang
+jarang, dan yang dibawanya tidak sepadan.
+
+**Sinyal NELA terkumpul di satu grup.** Style sendiri mencapai 0,6599 dari 0,6837
+milik 87 fitur penuh, dengan 40 kolom. Lima grup sisanya menyumbang 0,0238
+di atas grup terbesar. Bila fitur ini pernah dipertimbangkan masuk jalur serving,
+yang dibawa cukup grup style; itu juga membuang grup `event`, yang memakan 92%
+waktu ekstraksi.
+
+**Grup `event` tidak mengukur apa pun pada teks sependek kalimat.** Satu dari dua
+kolomnya konstan dan terbuang, dan yang tersisa memberi 0,4401, sekitar 0,09 di
+atas prediktor konstan. Itu membenarkan keputusan 3.4 dari arah yang berlawanan
+dengan alasan aslinya: grup itu dipertahankan supaya tidak ada catatan kaki di
+tabel-tabel berikutnya, dan hasilnya adalah baris yang bisa dilaporkan apa adanya
+alih-alih lubang yang harus dijelaskan.
+
+**Tidak ada yang gagal di sini.** Bagian 6 sudah menetapkan tidak ada ambang yang
+harus dilewati. PRD 6.1 menyiapkan bacaan untuk kemungkinan NELA mendekati
+DeBERTa; yang terjadi kebalikannya, dan kesimpulannya sudah tertulis di bagian 6:
+keunggulan DeBERTa datang dari konteks, bukan dari fitur permukaan.

@@ -107,6 +107,49 @@ Yang diukur hanya F1 macro pada fold BABE. Generalisasi lintas dataset,
 kalibrasi, dan held-out berita terbaru belum diukur. Rinciannya di
 [bagian 12 desain M2](docs/superpowers/specs/2026-08-28-training-m2-finetune-design.md).
 
+### Hasil M3: baseline NELA
+
+Fitur linguistik eksplisit, diukur pada fold yang sama.
+
+| | F1 macro | Delta TF-IDF |
+|---|---|---|
+| TF-IDF + logistic regression | 0,7420 +/- 0,0194 | +0,0000 |
+| NELA + logistic regression | 0,6837 +/- 0,0116 | -0,0583 |
+| TF-IDF + NELA + logistic regression | 0,7294 +/- 0,0130 | -0,0126 |
+| DeBERTa-v3-base | 0,8477 +/- 0,0195 | +0,1058 |
+
+Per grup fitur, semuanya dengan logistic regression yang sama:
+
+| Grup | Fitur | Bertahan | F1 macro |
+|---|---|---|---|
+| style | 50 | 40 | 0,6599 +/- 0,0089 |
+| affect | 9 | 9 | 0,6194 +/- 0,0211 |
+| bias | 8 | 8 | 0,5884 +/- 0,0240 |
+| complexity | 7 | 7 | 0,5382 +/- 0,0375 |
+| moral | 11 | 11 | 0,5028 +/- 0,0310 |
+| event | 2 | 1 | 0,4401 +/- 0,0175 |
+
+NELA tertinggal 0,0583 di bawah TF-IDF dan 0,1640 di bawah DeBERTa.
+Menyambungkannya ke TF-IDF menurunkan angka 0,0126, bukan menaikkannya, jadi
+fitur ini bukan sinyal kuat yang kebetulan tumpang tindih dengan bag-of-words:
+ia memang lemah pada teks sependek kalimat. Keunggulan DeBERTa karena itu datang
+dari konteks, bukan dari hitungan kata kerja factive dan hedge.
+
+Sinyal yang ada terkumpul di grup style: 40 kolomnya sendiri mencapai 0,6599 dari
+0,6837 milik 87 fitur penuh. Grup `event` memberi 0,4401, sekitar 0,09 di atas
+prediktor konstan (0,3534 bila selalu menebak `biased`), sementara memakan 92%
+waktu ekstraksi.
+
+Keempat deviasi standar itu tidak mengukur hal yang sama. Milik DeBERTa mencampur
+sebaran antar-fold dan antar-seed dari 25 run; milik ketiga logistic regression
+hanya sebaran antar-fold dari 5 run, karena lbfgs pada data tetap bersifat
+deterministik. Yang sebanding adalah mean per fold, dan delta di tabel dibaca
+dari situ. Rinciannya di
+[bagian 11 desain M3](docs/superpowers/specs/2026-08-29-training-m3-nela-design.md).
+
+Paket `nela-features==3.0.1` memberi 87 fitur, bukan 141 seperti yang tertulis di
+PRD versi awal. Angka 141 adalah angka paper Horne et al. 2018.
+
 ## Keterbatasan
 
 **Selama `NEUTRAL_MODEL_BACKEND=stub`, seluruh angka yang ditampilkan tidak

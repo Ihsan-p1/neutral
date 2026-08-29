@@ -321,10 +321,16 @@ Konkatenasi membutuhkan custom model class, custom collator, dan custom trainer
 — biaya nyata, sementara DeBERTa kemungkinan besar sudah menangkap sinyal loaded
 language sehingga delta-nya mendekati nol.
 
-Sebagai gantinya, **NELA features** (Horne et al., 2018 — 141 fitur linguistik
-termasuk factives, assertives, implicatives, hedges) dipakai sebagai **model
-baseline terpisah**: logistic regression di atas fitur NELA, dibandingkan
-langsung dengan DeBERTa.
+Sebagai gantinya, **NELA features** (Horne et al., 2018, termasuk factives,
+assertives, implicatives, hedges) dipakai sebagai **model baseline terpisah**:
+logistic regression di atas fitur NELA, dibandingkan langsung dengan DeBERTa.
+
+Jumlahnya **87 fitur**, bukan 141 seperti yang tertulis di versi awal dokumen
+ini. Angka 141 adalah angka paper Horne et al. 2018; paket
+`nela-features==3.0.1` mengembalikan 87 dari `extract_all`, terbagi menjadi
+style 50, complexity 7, bias 8, affect 9, moral 11, dan event 2. Dikoreksi di M3
+setelah dihitung, dengan pola yang sama seperti M1 mengoreksi asumsi
+`article_id` yang ternyata tidak ada di BABE.
 
 Cerita ablation-nya tetap utuh, tanpa satu baris pun kode arsitektur custom.
 Bila ternyata NELA + logistic regression mendekati performa DeBERTa, itu justru
@@ -469,8 +475,9 @@ dipakai di v1.
 
 **12.2 Lexicon — ditutup.**
 Gunakan **NELA features** menggantikan lexicon Recasens 2013 — tersedia sebagai
-package siap pakai, gratis, dan memberi 141 fitur linguistik alih-alih density
-dari satu lexicon berusia lebih dari sepuluh tahun. LIWC tidak dipakai karena
+package siap pakai, gratis, dan memberi 87 fitur linguistik alih-alih density
+dari satu lexicon berusia lebih dari sepuluh tahun (lihat koreksi 141 ke 87 di
+6.1). LIWC tidak dipakai karena
 berbayar. Perannya sebagai baseline terpisah, bukan konkatenasi (lihat 6.1).
 
 ## 13. Ringkasan Perubahan v1 → v2
