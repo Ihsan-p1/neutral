@@ -243,6 +243,77 @@ def load_basil(cache_dir: str = "data/basil") -> tuple[list[Row], LoadReport]:
     return rows, report
 
 
+HF_DATASET = "horychtom/BASIL"
+
+# Di bawah ini, yang rusak adalah kode normalisasinya sendiri, bukan datanya,
+# dan angka perbandingan apa pun jadi tidak berarti.
+HF_MATCH_FLOOR = 0.50
+
+
+@dataclass(frozen=True)
+class HfComparison:
+    """Hasil perbandingan sekali jalan spec 3.3. Tidak menghasilkan label."""
+
+    n_official: int
+    n_hf: int
+    n_matched: int
+    n_ambiguous: int
+    n_label_differs: int
+    matched_ratio: float
+    differs_ratio: float
+
+
+def _compare_rows(rows: list[Row], hf_rows: list[dict]) -> HfComparison:
+    """Bandingkan label resmi dengan `lex_label` HuggingFace lewat teks ternormalisasi.
+
+    Teks resmi yang muncul lebih dari sekali dikeluarkan dari perbandingan: tidak
+    ada cara menentukan baris HuggingFace mana pasangannya, dan menebak akan
+    mengarang angka ketidaksesuaian.
+    """
+    counts: Counter[str] = Counter(normalise(row.text) for row in rows)
+    official = {
+        normalise(row.text): row.lex for row in rows if counts[normalise(row.text)] == 1
+    }
+    matched = 0
+    differs = 0
+    for hf_row in hf_rows:
+        key = normalise(str(hf_row["text"]))
+        if key not in official:
+            continue
+        matched += 1
+        if int(hf_row["lex_label"]) != official[key]:
+            differs += 1
+
+    return HfComparison(
+        n_official=len(rows),
+        n_hf=len(hf_rows),
+        n_matched=matched,
+        n_ambiguous=sum(1 for key, count in counts.items() if count > 1),
+        n_label_differs=differs,
+        matched_ratio=matched / len(hf_rows) if hf_rows else 0.0,
+        differs_ratio=differs / matched if matched else 0.0,
+    )
+
+
+def compare_with_hf(rows: list[Row], cache_dir: str = "data/basil") -> HfComparison:
+    """Muat re-upload HuggingFace sekali dan bandingkan. Tidak mengubah label.
+
+    Import `datasets` sengaja lokal: jalur muat utama modul ini stdlib saja, dan
+    kegagalan unduhan di sini tidak boleh menjatuhkan `load_basil()`.
+    """
+    from datasets import load_dataset
+
+    dataset = load_dataset(HF_DATASET, cache_dir=cache_dir, split="train")
+    hf_rows = [{"text": row["text"], "lex_label": row["lex_label"]} for row in dataset]
+    comparison = _compare_rows(rows, hf_rows)
+    if comparison.matched_ratio < HF_MATCH_FLOOR:
+        raise RuntimeError(
+            f"hanya {comparison.matched_ratio:.1%} baris HuggingFace cocok; "
+            "normalisasi teks kemungkinan rusak, angkanya tidak berarti"
+        )
+    return comparison
+
+
 def _fake_release(root: pathlib.Path) -> None:
     """Tulis satu triplet tiruan dengan struktur identik rilis resmi.
 
@@ -334,6 +405,38 @@ def _self_check() -> None:
     assert normalise("  a\n b\tc ") == "a b c"
     assert normalise("“dia” — ‘itu’") == '"dia" - \'itu\''
     assert normalise("sama") == normalise("sama")
+
+    # Perbandingan HuggingFace dihitung dari peta teks, jadi bagian yang bisa
+    # salah diuji tanpa jaringan: baris ganda dan baris yang labelnya beda.
+    rows = [
+        Row("kalimat nol di sini", 1, 0, "event-a", "artikel-1", "nyt", "2010"),
+        Row("kalimat satu di sini", 0, 0, "event-a", "artikel-1", "nyt", "2010"),
+        Row("kalimat dua di sini", 0, 1, "event-a", "artikel-1", "nyt", "2010"),
+    ]
+    hf = [
+        # cocok, label sama
+        {"text": "kalimat nol di sini", "lex_label": 1},
+        # cocok setelah normalisasi, label beda
+        {"text": "  kalimat   satu di sini ", "lex_label": 1},
+        # tidak cocok ke kalimat mana pun
+        {"text": "kalimat lain sekali", "lex_label": 0},
+    ]
+    comparison = _compare_rows(rows, hf)
+    assert comparison.n_official == 3, comparison
+    assert comparison.n_hf == 3, comparison
+    assert comparison.n_matched == 2, comparison
+    assert comparison.n_label_differs == 1, comparison
+    assert comparison.matched_ratio == 2 / 3, comparison
+    assert comparison.differs_ratio == 1 / 2, comparison
+
+    # Teks resmi yang muncul dua kali tidak dipakai membandingkan apa pun:
+    # tidak ada cara menentukan baris HuggingFace itu pasangan yang mana.
+    doubled = rows + [
+        Row("kalimat nol di sini", 0, 0, "event-b", "artikel-9", "fox", "2011")
+    ]
+    comparison = _compare_rows(doubled, hf[:1])
+    assert comparison.n_ambiguous == 1, comparison
+    assert comparison.n_matched == 0, comparison
 
     print("self-check ok")
 
