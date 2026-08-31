@@ -5,7 +5,9 @@ seberapa netral cara sebuah kalimat menyampaikan informasi berdasarkan pilihan
 kata, bukan berdasarkan konten faktualnya.
 
 **Status:** dalam pengembangan. Lapisan serving dibangun lebih dulu dengan
-classifier stub; model terlatih menyusul.
+classifier stub. Model DeBERTa sudah dilatih dan dievaluasi (lihat Hasil
+evaluasi), tetapi belum diekspor ke ONNX, jadi aplikasi yang berjalan masih
+memakai stub.
 
 ## Dokumen
 
@@ -80,6 +82,30 @@ Seluruh konfigurasi dibaca dari environment variable berawalan `NEUTRAL_`.
 | `NEUTRAL_MAX_SENTENCES` | `300` | Batas jumlah kalimat per request |
 | `NEUTRAL_LOG_LEVEL` | `INFO` | Level logging |
 | `PORT` | `8000` | Port HTTP (dibaca oleh container) |
+
+## Hasil evaluasi
+
+### Hasil M2: DeBERTa fine-tuned
+
+| | F1 macro |
+|---|---|
+| TF-IDF + logistic regression | 0,7420 +/- 0,0194 |
+| DeBERTa-v3-base, 5 fold x 5 seed | 0,8477 +/- 0,0277 |
+
+Learning rate 3e-5, dipilih lewat validation loss pada satu fold. Setiap angka
+per fold adalah mean atas 5 seed, dan deviasi antar-fold serta antar-seed
+dilaporkan terpisah karena artinya berbeda: 0,0195 antar-fold dan 0,0187
+antar-seed. Keduanya hampir sama besar, jadi satu angka dari satu fold dengan
+satu seed akan menyembunyikan sebagian besar sebarannya.
+
+Fold dibangun per artikel (`news_link`), bukan per baris, jadi angka di atas
+tidak dapat dibandingkan langsung dengan angka mana pun yang dihitung pada split
+resmi BABE. Split resmi itu sendiri bocor: 384 dari 2.151 kunci grup muncul di
+train dan test sekaligus. Target 0,78 di literatur dihitung pada split itu.
+
+Yang diukur hanya F1 macro pada fold BABE. Generalisasi lintas dataset,
+kalibrasi, dan held-out berita terbaru belum diukur. Rinciannya di
+[bagian 12 desain M2](docs/superpowers/specs/2026-08-28-training-m2-finetune-design.md).
 
 ## Keterbatasan
 

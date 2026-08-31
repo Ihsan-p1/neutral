@@ -3,7 +3,12 @@ import pathlib
 
 import pytest
 
-from training.split import fold_of, group_key_from_url, group_split
+from training.split import (
+    fold_of,
+    group_key_from_url,
+    group_split,
+    train_val_test_folds,
+)
 
 
 def test_same_group_always_lands_in_one_fold():
@@ -89,3 +94,39 @@ def test_split_module_imports_only_stdlib():
         elif isinstance(node, ast.ImportFrom) and node.module:
             imported.add(node.module.split(".")[0])
     assert imported <= {"hashlib", "urllib"}, f"impor tidak diizinkan: {imported}"
+
+
+def test_fold_triple_parts_are_disjoint():
+    # Spec 3.2: val tidak boleh sama dengan test, dan keduanya tidak boleh ikut
+    # train. Bila ini rusak, model melihat fold test saat memilih epoch.
+    for held_out in range(5):
+        train, val, test = train_val_test_folds(held_out, n_folds=5)
+        assert val != test
+        assert val not in train
+        assert test not in train
+        assert len(set(train)) == len(train)
+
+
+def test_fold_triple_covers_every_fold():
+    for held_out in range(5):
+        train, val, test = train_val_test_folds(held_out, n_folds=5)
+        assert sorted([*train, val, test]) == [0, 1, 2, 3, 4]
+
+
+def test_fold_triple_test_is_the_held_out_fold():
+    # Tabel spec 3.2: held_out=i memakai fold i sebagai test dan fold i+1 sebagai
+    # val.
+    for held_out in range(5):
+        train, val, test = train_val_test_folds(held_out, n_folds=5)
+        assert test == held_out
+        assert val == (held_out + 1) % 5
+
+
+def test_fold_triple_rejects_bad_arguments():
+    with pytest.raises(ValueError):
+        train_val_test_folds(5, n_folds=5)
+    with pytest.raises(ValueError):
+        train_val_test_folds(-1, n_folds=5)
+    with pytest.raises(ValueError):
+        # Dua fold tidak menyisakan apa pun untuk train.
+        train_val_test_folds(0, n_folds=2)
