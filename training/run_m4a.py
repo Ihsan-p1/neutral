@@ -12,10 +12,13 @@ label yang tertukar atau preprocessing inferensi yang berbeda dari saat
 training, dan dua-duanya tidak menimbulkan error apa pun.
 """
 
+import pathlib
+
 import torch
-from sklearn.metrics import f1_score
+from sklearn.metrics import average_precision_score, f1_score
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from training.baseline_tfidf import fit_predict_proba
 from training.basil import Row as BasilRow
 from training.basil import compare_with_hf, load_basil, normalise
 from training.data import load_babe
@@ -38,6 +41,12 @@ OVERLAP_LIMIT = 0.01
 # Pembagian dev/test BASIL, spec 3.4. Kuncinya event, bukan artikel, bukan baris.
 DEV_FOLDS = 10
 DEV_CUTOFF = 3
+
+REPORT_PATH = pathlib.Path("runs/m4a_report.txt")
+
+# Kandidat threshold. Rentang tetap, bukan probabilitas unik, supaya nilai yang
+# dilaporkan sama persis di setiap jalan dan mudah dibaca di tabel.
+THRESHOLDS = [value / 100 for value in range(1, 100)]
 
 
 def predict_deberta(
@@ -128,33 +137,96 @@ def split_dev_test(rows: list[BasilRow]) -> tuple[list[int], list[int]]:
     return dev, test
 
 
+def best_threshold(
+    probabilities: list[float], gold: list[int], indices: list[int]
+) -> float:
+    """Cari threshold yang memaksimalkan F1 macro pada indeks yang diberikan.
+
+    Dipanggil hanya dengan indeks dev. Memanggilnya dengan indeks test akan
+    memilih threshold pada data yang sama tempat angkanya dilaporkan, dan itu
+    tidak menimbulkan error apa pun.
+    """
+    subset_gold = [gold[index] for index in indices]
+    scored = []
+    for threshold in THRESHOLDS:
+        predicted = [1 if probabilities[index] >= threshold else 0 for index in indices]
+        scored.append(
+            (
+                f1_score(subset_gold, predicted, average="macro", zero_division=0),
+                threshold,
+            )
+        )
+    return max(scored)[1]
+
+
+def score(
+    probabilities: list[float],
+    gold: list[int],
+    dev: list[int],
+    test: list[int],
+) -> dict:
+    """Hitung kedua angka PRD 8.2 plus AP, semuanya pada indeks test.
+
+    Angka apa adanya dan angka rekalibrasi dihitung pada baris yang sama supaya
+    selisihnya murni efek threshold. Dev hanya dipakai memilih threshold.
+    """
+    threshold = best_threshold(probabilities, gold, dev)
+    test_gold = [gold[index] for index in test]
+    test_prob = [probabilities[index] for index in test]
+    asis = [1 if value >= 0.5 else 0 for value in test_prob]
+    recal = [1 if value >= threshold else 0 for value in test_prob]
+
+    return {
+        "f1_asis": float(f1_score(test_gold, asis, average="macro", zero_division=0)),
+        "f1_recal": float(f1_score(test_gold, recal, average="macro", zero_division=0)),
+        "threshold": threshold,
+        "ap": float(average_precision_score(test_gold, test_prob)),
+        "gold_rate": sum(test_gold) / len(test_gold),
+        "pred_rate": sum(asis) / len(asis),
+    }
+
+
+def constant_floor(gold: list[int], indices: list[int]) -> float:
+    """F1 macro bila seluruh baris diprediksi neutral.
+
+    Dicetak bersama tabel: pada prior positif serendah BASIL, angka di sekitar
+    0,49 setara dengan tidak memprediksi apa pun, dan tanpa lantai ini ia
+    terbaca seperti ada sinyal.
+    """
+    subset = [gold[index] for index in indices]
+    return float(f1_score(subset, [0] * len(subset), average="macro", zero_division=0))
+
+
 def main() -> None:
     assert_checkpoint_reproduces()
 
+    lines: list[str] = []
     babe_rows, _ = load_babe()
     rows, report = load_basil()
-    print(f"artikel BASIL      : {report.n_articles}, event {report.n_events}")
-    print(
+    lines.append(f"artikel BASIL      : {report.n_articles}, event {report.n_events}")
+    lines.append(
         f"kalimat            : {report.n_sentences_raw}, "
         f"kosong dibuang {report.n_blank_dropped}"
     )
-    print(f"span               : {report.n_spans}, tidak sesuai {report.n_span_mismatch}")
-    print(f"positif lex        : {report.n_lex} ({report.n_lex / len(rows):.1%})")
-    print(
+    lines.append(
+        f"span               : {report.n_spans}, tidak sesuai {report.n_span_mismatch}"
+    )
+    lines.append(f"positif lex        : {report.n_lex} ({report.n_lex / len(rows):.1%})")
+    lines.append(
         f"positif lex or inf : {report.n_lex_or_info} "
         f"({report.n_lex_or_info / len(rows):.1%})"
     )
-    print(f"sumber             : {report.sources}")
+    lines.append(f"sumber             : {report.sources}")
 
     comparison = compare_with_hf(rows)
-    print(
+    lines.append(
         f"banding HuggingFace: {comparison.n_hf} baris, cocok "
         f"{comparison.matched_ratio:.1%}, label beda {comparison.differs_ratio:.1%}"
     )
 
     rows, dropped = drop_babe_overlap(rows, [row.text for row in babe_rows])
     ratio = dropped / (len(rows) + dropped)
-    print(f"irisan dengan BABE : {dropped} kalimat dibuang ({ratio:.2%})")
+    lines.append(f"irisan dengan BABE : {dropped} kalimat dibuang ({ratio:.2%})")
     if ratio > OVERLAP_LIMIT:
         raise RuntimeError(
             f"{ratio:.1%} kalimat BASIL juga ada di BABE; "
@@ -164,8 +236,72 @@ def main() -> None:
     dev, test = split_dev_test(rows)
     dev_events = len({rows[index].event_key for index in dev})
     test_events = len({rows[index].event_key for index in test})
-    print(f"dev                : {len(dev)} kalimat, {dev_events} event")
-    print(f"test               : {len(test)} kalimat, {test_events} event")
+    lines.append(f"dev                : {len(dev)} kalimat, {dev_events} event")
+    lines.append(f"test               : {len(test)} kalimat, {test_events} event")
+
+    texts = [row.text for row in rows]
+    predictions = {
+        "DeBERTa": predict_deberta(texts),
+        "TF-IDF": fit_predict_proba(
+            [row.text for row in babe_rows],
+            [row.label for row in babe_rows],
+            texts,
+        ),
+    }
+    golds = {
+        "lex": [row.lex for row in rows],
+        "lex or inf": [1 if row.lex or row.info else 0 for row in rows],
+    }
+
+    lines.append("")
+    lines.append(
+        f"{'model':8} {'gold':11} {'F1 apa adanya':>13} {'F1 rekal':>9} "
+        f"{'thr':>5} {'AP':>6} {'gold+':>6} {'pred+':>6}"
+    )
+    for model_name, probabilities in predictions.items():
+        for gold_name, gold in golds.items():
+            result = score(probabilities, gold, dev, test)
+            lines.append(
+                f"{model_name:8} {gold_name:11} {result['f1_asis']:13.4f} "
+                f"{result['f1_recal']:9.4f} {result['threshold']:5.2f} "
+                f"{result['ap']:6.4f} {result['gold_rate']:6.1%} "
+                f"{result['pred_rate']:6.1%}"
+            )
+
+    lines.append("")
+    for gold_name, gold in golds.items():
+        lines.append(
+            f"lantai constant predictor, gold {gold_name}: "
+            f"F1 macro {constant_floor(gold, test):.4f}"
+        )
+    lines.append("")
+    lines.append(
+        "pembanding BABE: TF-IDF 0,7420 +/- 0,0194 (M1), "
+        "DeBERTa 0,8477 +/- 0,0277 (M2)"
+    )
+    # Empat catatan spec 7.3, dicetak bersama tabel dan bukan di catatan kaki.
+    lines.append(
+        "catatan: label dihitung dari rilis resmi launchnlp/BASIL dengan "
+        "segmentasi kalimat milik dataset itu sendiri; re-upload HuggingFace "
+        "hanya dibandingkan, tidak dipakai sebagai label"
+    )
+    lines.append(
+        "catatan: aturan pemetaan - kalimat ke-k biased bila ada span "
+        "bias == 'lex' dengan id == 'p{k}'"
+    )
+    lines.append(
+        "catatan: BASIL beranotasi dalam konteks artikel, BABE berisi kalimat "
+        "berdiri sendiri; sebagian selisih adalah artefak label"
+    )
+    lines.append(
+        "catatan: angka DeBERTa berasal dari satu checkpoint, bukan mean "
+        "beberapa seed; M2 mengukur spread antar-seed 0,0187 pada BABE"
+    )
+
+    print("\n".join(lines))
+    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    REPORT_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"\nlaporan disimpan   : {REPORT_PATH}")
 
 
 if __name__ == "__main__":
