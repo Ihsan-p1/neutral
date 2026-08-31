@@ -52,6 +52,25 @@ def run_baseline(
     return scores
 
 
+def fit_predict_proba(
+    train_texts: list[str], train_labels: list[int], test_texts: list[str]
+) -> list[float]:
+    """Latih pada seluruh data latih, kembalikan P(label == 1) untuk tiap teks test.
+
+    `run_baseline()` terikat loop fold dan tidak bisa dipakai untuk test set
+    eksternal seperti BASIL, di mana tidak ada fold. Yang dipakai ulang di sini
+    setelan `_model()`, jadi baseline M4a identik dengan baseline M1 selain
+    bagian train-nya yang memakai seluruh BABE.
+
+    Kebocoran yang dijaga `run_baseline()` tidak berlaku di sini: teks test
+    berasal dari korpus lain, jadi mem-fit vectorizer pada seluruh data latih
+    tidak membocorkan apa pun tentang test.
+    """
+    model = _model()
+    model.fit(train_texts, train_labels)
+    return [float(value) for value in model.predict_proba(test_texts)[:, 1]]
+
+
 def _self_check() -> None:
     """Periksa loop fold pada data yang jawabannya sudah diketahui."""
     biased = ["so-called experts peddle this outrageous scheme"] * 50
@@ -71,6 +90,17 @@ def _self_check() -> None:
         pass
     else:
         raise AssertionError("fold kosong seharusnya menimbulkan ValueError")
+
+    # Fit pada seluruh data, prediksi teks yang tidak ada di dalamnya. Dipakai
+    # M4a untuk test set eksternal, di mana tidak ada fold sama sekali.
+    probabilities = fit_predict_proba(
+        texts,
+        labels,
+        ["outrageous so-called experts", "the budget was reviewed on tuesday"],
+    )
+    assert len(probabilities) == 2, probabilities
+    assert all(0.0 <= value <= 1.0 for value in probabilities), probabilities
+    assert probabilities[0] > probabilities[1], probabilities
 
     print("self-check ok:", [round(s, 4) for s in scores])
 
