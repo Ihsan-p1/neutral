@@ -55,27 +55,52 @@ lainnya tidak ada lagi dan mereproduksinya berarti training ulang.
 
 ## 3. Keputusan yang ditutup
 
-### 3.1 Sumber data: HuggingFace dulu, diverifikasi dari rilis resmi
+### 3.1 Sumber data: rilis resmi, karena BASIL membawa segmentasi kalimatnya sendiri
 
-BASIL tersedia dari dua arah. `launchnlp/BASIL` adalah rilis resmi kedua: teks
-artikel penuh plus anotasi gold-standard span-level, sudah memisahkan bias type
-lexical dan informational, dengan indeks start/end yang diperbaiki dibanding
-rilis pertama. `horychtom/BASIL` di HuggingFace adalah re-upload tidak resmi yang
-sudah diproses menjadi kalimat: 8.018 baris dengan kolom `text`, `lex_label`,
-`info_label`, `original_label`.
+Sumber tunggal label adalah rilis resmi `launchnlp/BASIL`, diunduh sebagai satu
+tarball ke `data/basil/`. Struktur berikut diperiksa langsung pada 2026-08-31,
+bukan disimpulkan dari paper:
 
-Yang dipakai adalah versi HuggingFace, dan pemetaannya diverifikasi terhadap
-rilis resmi. Alasannya bukan kecepatan semata. Membangun label kalimat dari span
-sendiri memaksa satu keputusan metodologis tambahan yang harus dibela — pilihan
-segmenter kalimat menggeser batas kalimat, dan batas kalimat menentukan span mana
-jatuh di dalamnya. Memakai pemetaan yang sudah ada lalu memeriksanya memindahkan
-pekerjaan dari membuat keputusan baru ke memvalidasi keputusan orang lain, dan
-yang kedua lebih murah sekaligus lebih mudah dilaporkan.
+```
+articles/<tahun>/<triplet-uuid>_<1|2|3>.json
+  body-paragraphs : list paragraf, tiap paragraf berupa list KALIMAT
+  triplet-uuid    : id event      uuid : id artikel      source : 'nyt' | ...
 
-Yang tidak boleh terjadi adalah memakai pemetaan itu sebagai kotak hitam. PRD 8.2
-mensyaratkan aturan pemetaan span ke kalimat dinyatakan eksplisit, dan itu tidak
-bisa dipenuhi kalau aturannya tidak diketahui. Karena itu verifikasi di 3.3 bukan
-tambahan, tapi syarat jalur ini boleh dipakai.
+annotations/<tahun>/<triplet-uuid>_<1|2|3>_ann.json
+  phrase-level-annotations : [{id: 'p0', bias: 'lex' | 'inf',
+                               start: 81, end: 87, txt: 'fierce', quote: 'no', ...}]
+```
+
+Terhitung dari daftar isi repo: 300 artikel, 300 file anotasi, 100 triplet, tahun
+2010 sampai 2019.
+
+Dua fakta di struktur itu menentukan seluruh keputusan berikutnya. Pertama,
+`body-paragraphs` adalah list dari list kalimat, jadi segmentasi kalimat datang
+dari dataset dan tidak perlu dipilih. Kedua, `id` pada span bukan sekadar nama:
+`p{k}` menunjuk kalimat ke-`k` pada daftar kalimat yang sudah diratakan, dan
+`start`/`end` relatif terhadap kalimat itu. Diuji pada artikel contoh, 5 dari 5
+span memenuhi `sents[k][start:end] == txt`.
+
+Konsekuensinya, memetakan span ke label kalimat bukan pekerjaan perkiraan
+melainkan pembacaan indeks. Alternatifnya — memakai re-upload
+`horychtom/BASIL` di HuggingFace (8.018 kalimat, kolom `text`, `lex_label`,
+`info_label`, `original_label`) sebagai sumber label — ditolak karena menukar
+indeks yang pasti dengan pemetaan pihak ketiga yang tidak terdokumentasi, dan
+menambah kode pencocokan teks untuk label yang bisa dihitung langsung.
+
+Versi HuggingFace tetap dipakai satu kali, sebagai perbandingan sekali jalan di
+3.3. Perannya melaporkan seberapa dekat label project ini dengan label yang
+beredar, bukan menghasilkan label.
+
+### 3.1b Aturan pemetaan
+
+PRD 8.2 mensyaratkan aturan pemetaan span ke kalimat dinyatakan eksplisit.
+Aturannya: **kalimat ke-`k` dilabeli biased bila ada span dengan `bias == 'lex'`
+yang `id`-nya `p{k}`.** Untuk baris kedua tabel (3.2), `bias` yang diterima
+`'lex'` atau `'inf'`.
+
+Kalimat diratakan dari `body-paragraphs` dengan urutan paragraf dipertahankan,
+karena urutan itulah yang dipakai indeks `p{k}`.
 
 ### 3.2 Label positif: `lex_label` utama, `lex OR info` sebagai baris kedua
 
@@ -95,28 +120,32 @@ Baris kedua tidak pernah menjadi angka utama. Menilai model pada gold yang memua
 tugas yang tidak pernah dilatihkan akan menghasilkan angka yang lebih enak dibaca
 dan lebih tidak jujur.
 
-### 3.3 Pemetaan diverifikasi, dengan ambang dan cabang yang ditetapkan lebih dulu
+### 3.3 Perbandingan sekali jalan terhadap versi HuggingFace
 
-Dari anotasi resmi, label kalimat dihitung ulang dengan aturan eksplisit:
-**kalimat dianggap biased bila memuat minimal satu span bertipe lexical.** Hasil
-hitungan itu dicocokkan ke baris HuggingFace melalui teks yang dinormalisasi —
-whitespace diciutkan, tanda kutip diseragamkan, casing dipertahankan.
+Label sudah selesai dihitung dari rilis resmi sebelum bagian ini berjalan, jadi
+perbandingan ini tidak pernah menghasilkan atau mengubah label. Yang dihasilkan
+satu baris catatan di laporan.
 
-Titik ketidakcocokan yang sudah diketahui: README rilis kedua menyebut tanda
-kutip ikut disertakan ketika kalimat biased berupa kutipan. Normalisasi harus
-menangani itu, dan kalau ternyata tidak cukup, angka pencocokannya yang akan
-memberitahu.
+Baris HuggingFace dicocokkan ke kalimat resmi lewat teks yang dinormalisasi:
+whitespace diciutkan, tanda kutip typografis diseragamkan ke ASCII, casing
+dipertahankan. Titik ketidakcocokan yang sudah diketahui ada dua — README rilis
+kedua menyebut tanda kutip ikut disertakan ketika kalimat biased berupa kutipan,
+dan teks BASIL memuat karakter non-ASCII (em dash, curly quote) yang bisa
+berbeda encoding antar rilis.
 
-Dua angka dilaporkan: proporsi baris HuggingFace yang cocok ke tepat satu kalimat
-resmi, dan proporsi baris cocok yang `lex_label`-nya berbeda dari hasil hitungan
-sendiri.
+Tiga angka dilaporkan: jumlah kalimat di kedua sisi (sekitar 8.100 dari rilis
+resmi lawan 8.018 di HuggingFace), proporsi baris HuggingFace yang cocok ke tepat
+satu kalimat resmi, dan proporsi baris cocok yang `lex_label`-nya berbeda dari
+hasil hitungan sendiri.
 
-- **Cocok >= 95% dan beda label <= 2%** — jalur HuggingFace dipakai, dan aturan
-  pemetaan di atas dilaporkan sebagai aturan yang berlaku karena sudah
-  diverifikasi berlaku.
-- **Di bawah salah satu ambang** — `lex_label` HuggingFace dibuang seluruhnya dan
-  label dibangun dari rilis resmi. Cabang ini ditulis sekarang supaya
-  keputusannya bukan improvisasi saat implementasi.
+Tidak ada cabang keputusan yang bergantung pada angka ini, dan tidak ada ambang
+lulus. Satu-satunya `raise`: proporsi cocok di bawah 50%, yang berarti kode
+normalisasinya sendiri rusak dan angka yang dilaporkan tidak berarti apa pun.
+
+Bila selisih labelnya besar tapi pencocokannya sehat, itu dilaporkan apa adanya
+sebagai perbedaan antara label project ini dan label yang beredar — bukan
+diselesaikan di M4a. Yang menjadi dasar angka M4a tetap rilis resmi, dan aturan
+pemetaannya sudah dinyatakan di 3.1b.
 
 ### 3.4 Dev/test BASIL dikelompokkan per event, bukan per artikel
 
@@ -125,19 +154,21 @@ Times, dan Huffington Post. Membagi per artikel akan menempatkan tiga artikel
 tentang event yang sama di dev dan test sekaligus, dan kalimat yang nyaris
 identik muncul di dua sisi.
 
-Kunci grupnya karena itu event id, bukan artikel id. Datanya sudah menyediakan
-pengelompokan triplet, jadi biaya keputusan ini nol. Pembagiannya 30% dev / 70%
-test atas 100 event, seed tetap.
+Kunci grupnya karena itu event id, bukan artikel id. Biaya keputusan ini nol:
+`triplet-uuid` ada di setiap file artikel dan anotasi, dan juga menjadi nama
+filenya. Pembagiannya 30% dev / 70% test atas 100 event, seed tetap.
 
 Yang dituning di dev hanya satu skalar, jadi dampak kebocoran per artikel
 sebenarnya kecil. Keputusan ini diambil bukan karena dampaknya besar, tapi karena
 invarian yang sudah ditegakkan `run_m1.py` berbunyi fold dikelompokkan per
 sumber, bukan per baris, dan pengecualian yang tidak dibutuhkan tidak dibuat.
 
-Id event diambil dari anotasi resmi, yang tetap diunduh untuk 3.3. Versi
-HuggingFace tidak memuat identitas artikel maupun event sama sekali — itu
-konsekuensi kedua dari memakai versi yang sudah diproses, dan satu unduhan
-menutup dua kebutuhan.
+Pembagian dipakai ulang lewat `fold_of(triplet_uuid, n_folds=10, seed=0)` dari
+`training/split.py`: fold 0 sampai 2 menjadi dev, fold 3 sampai 9 menjadi test.
+Fungsi itu men-hash kuncinya dengan SHA-256, jadi hasilnya sama di setiap mesin
+tanpa menyimpan daftar apa pun ke disk, dan satu event selalu jatuh utuh di satu
+sisi. Tidak ada kode split baru, dan pembagian 30/70-nya perkiraan atas 100 event,
+bukan tepat — jumlah event per sisi dilaporkan apa adanya.
 
 ### 3.5 Average precision dilaporkan bersama F1
 
@@ -195,10 +226,12 @@ training/
   run_m4a.py          (baru)
 ```
 
-`basil.py` memuat BASIL, mengunduh anotasi resmi, menghitung ulang label dari
-span, mencocokkan teks, dan menyusun kunci grup event. Mengikuti `data.py`,
-fungsi muatnya mengembalikan baris plus `LoadReport` yang mencantumkan setiap
-baris yang dibuang dan alasannya.
+`basil.py` mengunduh tarball rilis resmi ke `data/basil/`, meratakan
+`body-paragraphs` menjadi kalimat, menerapkan aturan pemetaan 3.1b, dan menyusun
+kunci grup `triplet-uuid`. Mengikuti `data.py`, fungsi muatnya mengembalikan
+baris plus `LoadReport` yang mencantumkan setiap baris yang dibuang dan alasannya.
+Perbandingan terhadap versi HuggingFace (3.3) tinggal di modul yang sama, sebagai
+fungsi terpisah yang tidak dipanggil jalur muat.
 
 `run_baseline()` di `baseline_tfidf.py` terikat pada loop fold dan tidak bisa
 dipakai apa adanya untuk test set eksternal. Yang ditambahkan satu fungsi yang
@@ -220,18 +253,19 @@ inferensi identik dengan saat training.
    menurut `m2_selection.json`), dan **assert** selisih absolut F1 macro-nya
    terhadap 0,8765 tidak lebih dari 0,01. Guard ini berjalan sebelum apa pun yang
    menyentuh BASIL.
-3. Muat BASIL lewat `load_basil()`. Cetak `LoadReport`, angka pencocokan, dan
-   angka beda label. Terapkan cabang 3.3.
-4. Buang kalimat BASIL yang identik dengan kalimat BABE mana pun setelah
-   normalisasi, laporkan jumlahnya di `LoadReport`, dan **assert** proporsinya
-   tidak lebih dari 1%.
-5. Bagi 100 event jadi dev/test, kelompokkan per event, seed tetap.
-6. Prediksi seluruh BASIL dengan DeBERTa dan dengan TF-IDF yang di-fit pada
+3. Muat BASIL lewat `load_basil()` dan cetak `LoadReport`.
+4. Jalankan perbandingan HuggingFace (3.3), cetak tiga angkanya. **Assert**
+   proporsi cocok tidak di bawah 50%.
+5. Buang kalimat BASIL yang identik dengan kalimat BABE mana pun setelah
+   normalisasi, laporkan jumlahnya, dan **assert** proporsinya tidak lebih dari 1%.
+6. Bagi event jadi dev/test lewat `fold_of(triplet_uuid, 10, 0)`, fold 0-2 dev.
+   Cetak jumlah event dan kalimat di tiap sisi.
+7. Prediksi seluruh BASIL dengan DeBERTa dan dengan TF-IDF yang di-fit pada
    seluruh BABE.
-7. Untuk tiap kombinasi model dan definisi gold: hitung F1 macro apa adanya
+8. Untuk tiap kombinasi model dan definisi gold: hitung F1 macro apa adanya
    (argmax), cari threshold yang memaksimalkan F1 macro di dev, terapkan
    threshold itu di test, hitung AP.
-8. Cetak tabel, F1 macro constant predictor, dan simpan seluruh keluaran ke
+9. Cetak tabel, F1 macro constant predictor, dan simpan seluruh keluaran ke
    `runs/m4a_report.txt`.
 
 ---
@@ -270,9 +304,11 @@ untuk grup `event`, dan alasannya sama.
 
 Empat hal, ditulis bersama tabelnya dan bukan di catatan kaki:
 
-- Label BASIL berasal dari re-upload tidak resmi, diverifikasi terhadap rilis
-  resmi dengan angka pencocokan yang dilaporkan.
-- Aturan pemetaan: kalimat biased bila memuat minimal satu span lexical.
+- Label BASIL dihitung dari rilis resmi `launchnlp/BASIL`, dengan segmentasi
+  kalimat milik dataset itu sendiri. Perbandingan terhadap re-upload HuggingFace
+  dilaporkan sebagai catatan, bukan sebagai sumber label.
+- Aturan pemetaan: kalimat ke-`k` biased bila ada span `bias == 'lex'` dengan
+  `id == 'p{k}'`.
 - BASIL beranotasi dalam konteks artikel; BABE berisi kalimat berdiri sendiri.
 - Angka DeBERTa berasal dari satu checkpoint, bukan mean beberapa seed, sementara
   M2 mengukur spread antar-seed 0,0187 pada BABE.
@@ -283,10 +319,15 @@ Empat hal, ditulis bersama tabelnya dan bukan di catatan kaki:
 
 `basil.py` mendapat `_self_check()` di bawah `__main__`, mengikuti pola `nela.py`
 dan `baseline_tfidf.py`. Yang diperiksa pada data yang jawabannya sudah
-diketahui: normalisasi teks menyamakan varian whitespace dan tanda kutip, aturan
-minimal satu span lexical memberi label yang benar pada kasus batas (span di awal
-kalimat, span yang menyeberang batas kalimat, kalimat tanpa span), dan pembagian
-event menolak kalimat dari satu event muncul di dev dan test sekaligus.
+diketahui — anotasi tiruan, bukan unduhan: perataan `body-paragraphs` menjaga
+urutan paragraf, aturan 3.1b melabeli kalimat yang ditunjuk `p{k}` dan hanya
+kalimat itu, span `bias == 'inf'` tidak pernah menyalakan label utama, indeks
+`p{k}` di luar rentang ditolak, dan normalisasi teks menyamakan varian whitespace
+dan tanda kutip typografis.
+
+Satu pemeriksaan lagi berjalan pada data sungguhan di dalam `load_basil()`, bukan
+di self-check: kesesuaian `sents[k][start:end] == txt` untuk seluruh span di 300
+artikel. Itu yang mengubah hipotesis indeks menjadi terverifikasi.
 
 Tidak ada test di `tests/`. Direktori itu dijalankan di venv serving, yang tidak
 punya `datasets` dan tidak boleh punya. Batas yang sama sudah berlaku untuk
@@ -305,9 +346,10 @@ Tiga risiko pertama ditangani `raise`, bukan warning, mengikuti `run_m1.py`.
 | Risiko | Mitigasi |
 |---|---|
 | Urutan label checkpoint tertukar, atau preprocessing inferensi beda dari training | Guard reproduksi: F1 macro pada test split fold 0 BABE harus berada dalam 0,01 dari 0,8765 sebelum BASIL disentuh. Tanpa ini, penurunan di BASIL tidak bisa dibedakan dari bug inferensi |
-| Pemetaan span ke kalimat versi HuggingFace tidak sesuai aturan yang dilaporkan | Verifikasi silang dengan ambang cocok >= 95% dan beda label <= 2%; di bawahnya label dibangun dari rilis resmi |
+| Aturan pemetaan `p{k}` tidak berlaku untuk semua artikel, sehingga label bergeser diam-diam | Setiap span di-assert memenuhi `sents[k][start:end] == txt`; span yang tidak memenuhi dihitung dan dilaporkan, dan `raise` bila melebihi 1% dari seluruh span. Hipotesis indeks ini terbukti pada satu artikel saja, jadi ia diperlakukan sebagai hipotesis sampai seluruh 300 artikel memeriksanya |
+| Normalisasi teks rusak sehingga perbandingan HuggingFace tidak berarti | `raise` bila proporsi cocok di bawah 50%. Di atas itu angkanya dilaporkan apa adanya, tanpa cabang keputusan — label tidak bergantung padanya |
 | BABE dan BASIL beririsan, sehingga cross-dataset sebagian bukan cross-dataset | Kalimat identik dibuang dan jumlahnya dilaporkan; assert bila proporsinya melebihi 1%. Di atas ambang itu yang bermasalah bukan beberapa baris, melainkan klaim cross-dataset-nya sendiri, dan itu harus dibereskan sebelum angka dilaporkan. Keduanya menyerap artikel berita AS periode berdekatan, jadi ini diperiksa, bukan diasumsikan |
-| `horychtom/BASIL` hilang, karena re-upload tidak resmi | Cabang fallback di 3.3 sudah berupa jalur yang berdiri sendiri dari rilis resmi |
+| `horychtom/BASIL` hilang, karena re-upload tidak resmi | Angka M4a tidak bergantung padanya. Bila unduhannya gagal, perbandingan 3.3 dilewati dan dicatat sebagai tidak dijalankan |
 | F1 apa adanya jeblok dan terbaca sebagai kegagalan generalisasi | Dua angka PRD 8.2, dua definisi gold, AP, dan lantai constant predictor dicetak bersama |
 | Angka DeBERTa berasal dari satu checkpoint | Dinyatakan sebagai batasan di 7.3; spread seed 0,0187 dari M2 dikutip sebagai ukuran ketidakpastiannya |
 | Cakupan melebar ke training ulang atau ke 8.3 | Bagian 1 dan 10 menyatakan keduanya di luar cakupan |
