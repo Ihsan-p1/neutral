@@ -100,7 +100,42 @@ Four M3 results carry forward:
   `load_babe()`'s filters produces a different key and re-extracts, rather than
   silently reusing a matrix built from different rows. The file is gitignored.
 
-Next is M4a (cross-dataset eval on BASIL), which has no design or plan yet.
+M4a (cross-dataset eval on BASIL) is done. The design is
+`docs/superpowers/specs/2026-08-31-training-m4a-basil-design.md` and the plan is
+`docs/superpowers/plans/2026-08-31-training-m4a-basil.md`. `training/` gained
+`basil.py` (loader plus the HuggingFace comparison) and `run_m4a.py` (guards,
+thresholds, table). Work happens on `training-m4a`, branched from `training-m3`
+for the same reason M3 branched from M2.
+
+Five M4a results carry forward:
+
+- **Neither model transfers to BASIL, but only DeBERTa keeps anything.** DeBERTa
+  is F1 macro 0.5656 as-is and 0.5854 after the threshold is recalibrated on a
+  BASIL dev split, against 0.8477 on BABE. The constant "all neutral" predictor
+  reaches 0.4868 on the same rows, so DeBERTa sits 0.079 above predicting
+  nothing. TF-IDF returns 0.3912 as-is — *below* that floor — and 0.4963 after
+  recalibration. Spec section 11 has the full table.
+- **The drop is not mostly a threshold artifact.** Recalibration buys DeBERTa
+  0.0198 even though the positive prior moves from 54.6% to 5.1%. PRD 8.2
+  predicted the drop would largely be a label-mismatch artifact and required two
+  numbers to separate that; the two numbers say the prediction holds only in
+  small part. What still carries signal is the ranking: AP 0.1523 at a 0.051 base
+  rate is 2.99x chance for DeBERTa, against 1.03x — nothing — for TF-IDF.
+- **BASIL ships its own sentence segmentation, and span ids are indices.**
+  `body-paragraphs` is a list of sentence lists, and a span's `id` of `p{k}`
+  points at sentence `k` of the flattened list with `start`/`end` relative to
+  that sentence. Verified across all 300 articles: 3 of 1,726 spans (0.17%) fail
+  `sents[k][start:end] == txt`. No sentence splitter is chosen anywhere, which is
+  why the spec was revised mid-design away from the HuggingFace re-upload.
+- **`horychtom/BASIL` agrees with the official release.** 99.3% of its 8,018 rows
+  match a unique official sentence, and 0.6% of those disagree on `lex_label`. It
+  is a reported comparison only; labels always come from `launchnlp/BASIL`.
+- **449 of 7,977 sentences carry a lexical span (5.6%),** close to the 448 Fan et
+  al. 2019 report, and BASIL shares zero sentences with BABE after
+  normalisation. `data/basil/` holds the extracted release and is gitignored.
+
+Next is PRD 8.3 (outlet-correlation validation), which was deliberately split out
+of M4a and has no design or plan yet, and then M4b.
 
 ## Commands
 
@@ -125,6 +160,8 @@ uv pip install --python .venv-train/Scripts/python.exe -r training/requirements-
 .venv-train/Scripts/python.exe -m training.run_m2          # 27 runs, ~2 h, resumable
 .venv-train/Scripts/python.exe -m training.nela            # nela.py self-check
 .venv-train/Scripts/python.exe -m training.run_m3          # M3 report, 46 min first run
+.venv-train/Scripts/python.exe -m training.basil           # basil.py self-check
+.venv-train/Scripts/python.exe -m training.run_m4a         # M4a report, needs the GPU
 uv pip freeze --python .venv-train/Scripts/python.exe     # re-pin; uv venv has no pip
 ```
 
@@ -302,6 +339,7 @@ Conventional-commit prefixes: `feat:`, `fix:`, `chore:`, `docs:`, `ci:`, `test:`
 Work proceeds one plan task at a time: implement, run the tests named in the
 task, then commit. Do not batch several tasks into one commit.
 
-The serving-foundation, M1, M2, and M3 plans are fully executed. M4a has no plan
-document yet: write a design spec and a plan before starting it, the same way M1,
-M2, and M3 were done.
+The serving-foundation, M1, M2, M3, and M4a plans are fully executed. The
+outlet-correlation analysis (PRD 8.3) and M4b have no plan document yet: write a
+design spec and a plan before starting either, the same way M1 through M4a were
+done.

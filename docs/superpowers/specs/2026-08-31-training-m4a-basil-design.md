@@ -374,4 +374,98 @@ Tiga risiko pertama ditangani `raise`, bukan warning, mengikuti `run_m1.py`.
 
 ## 11. Hasil yang terukur
 
-Diisi setelah `run_m4a.py` dijalankan.
+Dijalankan lewat `.venv-train/Scripts/python.exe -m training.run_m4a` pada
+2026-08-31. Salinan lengkapnya di `runs/m4a_report.txt`.
+
+```
+guard reproduksi   : F1 macro 0.8765 pada 751 baris
+artikel BASIL      : 300, event 100
+kalimat            : 7984, kosong dibuang 7
+span               : 1726, tidak sesuai 3
+positif lex        : 449 (5.6%)
+positif lex or inf : 1623 (20.3%)
+sumber             : {'nyt': 100, 'fox': 100, 'hpo': 100}
+banding HuggingFace: 8018 baris, cocok 99.3%, label beda 0.6%
+irisan dengan BABE : 0 kalimat dibuang (0.00%)
+dev                : 2197 kalimat, 27 event
+test               : 5780 kalimat, 73 event
+```
+
+### 11.1 Tabel
+
+Semuanya diukur pada 5.780 kalimat test dari 73 event. Threshold dipilih di dev.
+
+| Model | Gold | F1 apa adanya | F1 rekalibrasi | thr | AP | gold+ | pred+ |
+|---|---|---|---|---|---|---|---|
+| DeBERTa | lex | 0,5656 | 0,5854 | 0,91 | 0,1523 | 5,1% | 17,9% |
+| DeBERTa | lex or inf | 0,6153 | 0,6113 | 0,43 | 0,3568 | 19,2% | 17,9% |
+| TF-IDF | lex | 0,3912 | 0,4963 | 0,73 | 0,0524 | 5,1% | 46,5% |
+| TF-IDF | lex or inf | 0,5028 | 0,5373 | 0,58 | 0,2426 | 19,2% | 46,5% |
+
+Lantai constant predictor pada test: **0,4868** untuk gold `lex`, **0,4468**
+untuk gold `lex or inf`.
+
+### 11.2 Bacaan
+
+**Penurunannya bertahan setelah threshold direkalibrasi.** DeBERTa naik dari
+0,5656 ke 0,5854, yaitu +0,0198. Terhadap angka BABE 0,8477 itu tetap turun
+0,26. PRD 8.2 menulis bahwa penurunan sebagian besar akan merupakan artefak
+ketidakcocokan label dan karena itu memerintahkan dua angka; dua angka itu
+sekarang ada, dan jawabannya adalah premis tersebut hanya berlaku sebagian
+kecil. Yang mengejutkan bukan angkanya, melainkan bahwa rekalibrasi hampir tidak
+menolong padahal prior positifnya bergeser dari 54,6% ke 5,1%.
+
+**Urutannya masih memuat sinyal, tapi tipis.** AP DeBERTa 0,1523 pada prior
+positif 0,051, yaitu 2,99 kali prediktor acak. Model masih menaruh kalimat
+biased lebih tinggi daripada kalimat neutral lebih sering daripada kebetulan;
+yang hilang bukan kemampuan membedakan, melainkan besarnya margin. Bandingkan
+dengan F1 apa adanya 0,5656 terhadap lantai 0,4868: hanya +0,079 di atas
+prediksi "semua neutral". Dua angka itu bersama-sama menggambarkan model yang
+mengurutkan sedikit lebih baik daripada acak dan tidak dapat dipakai pada
+threshold mana pun.
+
+**TF-IDF tidak berpindah sama sekali.** AP-nya 0,0524 pada prior 0,051, yaitu
+1,03 kali acak — nol sinyal, dalam batas ketelitian yang ada. F1 apa adanya
+0,3912 bahkan **di bawah** lantai constant predictor, karena ia menandai 46,5%
+kalimat sebagai biased pada test set yang isinya 5,1% biased. Setelah
+rekalibrasi ia mencapai 0,4963, yang praktis sama dengan lantai. Baseline yang
+di BABE mencapai 0,7420 karena itu tidak memindahkan apa pun ke korpus lain, dan
+ini menjelaskan angka DeBERTa: penurunan DeBERTa bukan gejala khas transformer,
+tapi DeBERTa satu-satunya dari keduanya yang masih menyisakan sesuatu.
+
+**Taxonomy menjelaskan sebagian kecil, bukan sebagian besar.** Memasukkan bias
+informational ke gold menaikkan F1 DeBERTa dari 0,5656 ke 0,6153 (+0,0497).
+Tetapi AP-nya justru turun secara relatif, dari 2,99 kali acak menjadi 1,86 kali
+acak. Artinya positif tambahan itu lebih sulit bagi model daripada positif
+leksikalnya, jadi kenaikan F1 datang dari prior yang lebih ramah, bukan dari
+model yang ternyata memang mendeteksi bias informational. Kalimat yang ditandai
+model bukan terutama kalimat informational yang salah dihitung.
+
+### 11.3 Yang tidak boleh disimpulkan dari angka ini
+
+- **Bukan pengukuran generalisasi secara umum.** Ini satu korpus, tiga outlet
+  (NYT, Fox, HuffPost), 2010-2019, dengan aturan pemetaan yang project ini pilih
+  sendiri. Angka pada korpus lain bisa berbeda arah.
+- **Bukan angka dengan pita ketidakpastian.** Satu checkpoint, bukan mean
+  beberapa seed. M2 mengukur sebaran antar-seed 0,0187 pada BABE, dan 24
+  checkpoint saudaranya sudah dihapus `run_m2.py:211`, jadi sebaran di BASIL
+  tidak diukur di sini.
+- **Bukan bukti label BASIL benar dan label BABE salah, atau sebaliknya.**
+  Keduanya definisi "biased" yang berbeda, dan bagian penurunannya yang berasal
+  dari perbedaan itu tidak dipisahkan oleh angka mana pun di tabel.
+- **Bukan alasan melatih pada BASIL.** BASIL adalah test set dan tetap test set;
+  memindahkannya ke sisi latih menghapus satu-satunya pengukuran yang ada di
+  project ini yang tidak dihitung pada distribusi BABE.
+
+### 11.4 Angka yang mengubah rencana berikutnya
+
+Verifikasi pemetaan berhasil sepenuhnya: 3 dari 1.726 span (0,17%) tidak
+memenuhi `sents[k][start:end] == txt`, dan perbandingan terhadap re-upload
+HuggingFace mencapai 99,3% cocok dengan hanya 0,6% label berbeda. Hipotesis
+indeks `p{k}` di spec 3.1 karena itu terbukti pada 300 artikel, bukan pada satu.
+
+449 kalimat memuat span leksikal, praktis sama dengan angka 448 yang dilaporkan
+Fan et al. 2019. Prior positifnya 5,6% terhadap 54,6% di BABE.
+
+Irisan dengan BABE nol kalimat, jadi klaim cross-dataset berlaku utuh dan tidak
+perlu disertai catatan pengurangan.
