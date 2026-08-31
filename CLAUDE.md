@@ -21,7 +21,7 @@ the code alone.
 
 ## Current state
 
-The serving layer is finished and runs end to end on the stub backend: 60 tests
+The serving layer is finished and runs end to end on the stub backend: 64 tests
 pass, ruff is clean, and the container definition and CI pipeline are written.
 A trained DeBERTa checkpoint now exists in `models/deberta-babe`, but nothing
 serves it yet: there is no ONNX export, so every number the running app reports
@@ -43,17 +43,19 @@ Three M1 results carry into everything after it:
   `news_link`, 215 for low annotator agreement, 0 for an unexpected label.
 
 M1 was committed on branch `training-m1` as six commits, one per plan task, and
-PR #1 is open against `main` with both CI jobs green. Merge it as a merge commit
-or a rebase, not a squash: the one-commit-per-task mapping is what the plan is
-checked against. That Linux CI run is also the only evidence `tests/test_split.py`
-passes off Windows.
+merged into `main` through PR #1. Every milestone PR is merged as a merge commit
+or a rebase, never a squash: the one-commit-per-task mapping is what the plan is
+checked against. The Linux CI run on each PR is also the only evidence
+`tests/test_split.py` passes off Windows — nothing here verifies that locally.
 
 M2 (fine-tuning DeBERTa) is done. The design is
 `docs/superpowers/specs/2026-08-28-training-m2-finetune-design.md` and the plan is
 `docs/superpowers/plans/2026-08-28-training-m2-finetune.md`. `training/` gained
-`train.py` (one run) and `run_m2.py` (orchestration of 27 runs). Work happens on
-`training-m2`, branched from `training-m1` because `main` still has no `training/`
-directory until PR #1 merges.
+`train.py` (one run) and `run_m2.py` (orchestration of 27 runs). It was built on
+`training-m2`, branched from `training-m1` because at the time `main` had no
+`training/` directory yet, and merged into `main` through PR #2. That branching
+reason is spent: M1 through M3 are on `main`, and M4a is the only milestone still
+in review, so the next one branches from `main`.
 
 Four M2 results carry forward:
 
@@ -78,8 +80,8 @@ M3 (NELA baseline) is done. The design is
 `docs/superpowers/specs/2026-08-29-training-m3-nela-design.md` and the plan is
 `docs/superpowers/plans/2026-08-29-training-m3-nela.md`. `training/` gained
 `nela.py` (extraction and cache) and `run_m3.py` (45 logistic regression fits).
-Work happens on `training-m3`, branched from `training-m2` for the same reason M2
-branched from M1.
+It was built on `training-m3`, branched from `training-m2` for the same reason M2
+branched from M1, and merged into `main` through PR #3.
 
 Four M3 results carry forward:
 
@@ -104,8 +106,8 @@ M4a (cross-dataset eval on BASIL) is done. The design is
 `docs/superpowers/specs/2026-08-31-training-m4a-basil-design.md` and the plan is
 `docs/superpowers/plans/2026-08-31-training-m4a-basil.md`. `training/` gained
 `basil.py` (loader plus the HuggingFace comparison) and `run_m4a.py` (guards,
-thresholds, table). Work happens on `training-m4a`, branched from `training-m3`
-for the same reason M3 branched from M2.
+thresholds, table). It was built on `training-m4a`, branched from `training-m3`,
+and is open as PR #4 against `main` with both CI jobs green.
 
 Five M4a results carry forward:
 
@@ -135,7 +137,12 @@ Five M4a results carry forward:
   normalisation. `data/basil/` holds the extracted release and is gitignored.
 
 Next is PRD 8.3 (outlet-correlation validation), which was deliberately split out
-of M4a and has no design or plan yet, and then M4b.
+of M4a and has no design or plan yet, and then M4b. Both branch from `main`.
+
+One thing M4a's numbers change for every milestone after it: the served model has
+now been measured outside BABE, and it does not transfer. Any claim about what the
+deployed classifier does has to carry the BASIL figure beside the BABE one, or it
+overstates what was measured.
 
 ## Commands
 
