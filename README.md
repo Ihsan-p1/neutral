@@ -150,6 +150,43 @@ dari situ. Rinciannya di
 Paket `nela-features==3.0.1` memberi 87 fitur, bukan 141 seperti yang tertulis di
 PRD versi awal. Angka 141 adalah angka paper Horne et al. 2018.
 
+### Hasil M4a: eval cross-dataset ke BASIL
+
+Model dilatih pada BABE, diuji pada BASIL tanpa penyesuaian apa pun. BASIL berisi
+300 artikel dari NYT, Fox News, dan HuffPost, 2010-2019. Label dihitung dari
+rilis resmi `launchnlp/BASIL` dengan aturan **kalimat dianggap biased bila memuat
+minimal satu span bertipe lexical**; segmentasi kalimatnya milik dataset itu
+sendiri, bukan hasil segmenter tambahan. Re-upload di HuggingFace hanya
+dibandingkan (99,3% cocok, 0,6% label berbeda), tidak dipakai sebagai sumber
+label.
+
+Diukur pada 5.780 kalimat dari 73 event; 27 event sisanya dipakai memilih
+threshold. Prior positifnya 5,1%, terhadap 54,6% biased di BABE.
+
+| Model | F1 apa adanya | F1 setelah rekalibrasi | AP |
+|---|---|---|---|
+| DeBERTa-v3-base | 0,5656 | 0,5854 | 0,1523 |
+| TF-IDF + logistic regression | 0,3912 | 0,4963 | 0,0524 |
+
+Prediktor konstan "semua neutral" mencapai F1 macro **0,4868** pada test set yang
+sama. Angka itu perlu dibaca lebih dulu: DeBERTa hanya 0,079 di atasnya, dan
+TF-IDF apa adanya berada di bawahnya.
+
+Tiga hal yang dilaporkan bersama angka tersebut:
+
+- **Rekalibrasi threshold tidak menyelamatkan penurunannya.** DeBERTa naik 0,0198
+  saja, sehingga terhadap 0,8477 di BABE tetap turun 0,26. PRD 8.2 memperkirakan
+  penurunan sebagian besar akan berupa artefak threshold dan ketidakcocokan
+  label; perkiraan itu hanya berlaku sebagian kecil.
+- **Sinyalnya masih ada, tipis.** AP DeBERTa 0,1523 pada prior 0,051 adalah 2,99
+  kali prediktor acak, jadi urutannya belum rusak. TF-IDF mencapai 1,03 kali
+  acak, yang berarti tidak memindahkan apa pun.
+- **Angkanya berasal dari satu checkpoint,** bukan mean beberapa seed. M2
+  mengukur sebaran antar-seed 0,0187 pada BABE; sebaran di BASIL tidak diukur.
+
+Bacaan lengkap, termasuk apa yang tidak boleh disimpulkan dari angka ini, ada di
+[bagian 11 desain M4a](docs/superpowers/specs/2026-08-31-training-m4a-basil-design.md).
+
 ## Keterbatasan
 
 **Selama `NEUTRAL_MODEL_BACKEND=stub`, seluruh angka yang ditampilkan tidak
