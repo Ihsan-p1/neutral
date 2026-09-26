@@ -5,9 +5,15 @@ seberapa netral cara sebuah kalimat menyampaikan informasi berdasarkan pilihan
 kata, bukan berdasarkan konten faktualnya.
 
 **Status:** dalam pengembangan. Lapisan serving dibangun lebih dulu dengan
-classifier stub. Model DeBERTa sudah dilatih dan dievaluasi (lihat Hasil
-evaluasi), tetapi belum diekspor ke ONNX, jadi aplikasi yang berjalan masih
-memakai stub.
+classifier stub. Model DeBERTa sudah dilatih, dievaluasi (lihat Hasil evaluasi),
+dan diekspor ke ONNX fp32 lewat `training/export_onnx.py`, jadi backend `onnx`
+sudah berjalan dengan bobot asli.
+
+Bobot dan hasil ekspornya di-gitignore dan tidak ikut dalam clone. Default tetap
+`stub`; untuk menjalankan model asli, ekspor dulu (lihat Menjalankan secara
+lokal) lalu setel `NEUTRAL_MODEL_BACKEND=onnx`. Temperature yang dikirim masih
+1.0 — kalibrasi adalah M4b dan belum dijalankan, jadi probabilitasnya sah
+sebagai urutan tetapi belum terkalibrasi.
 
 ## Dokumen
 
@@ -33,6 +39,22 @@ Menjalankan test:
 .venv/Scripts/python.exe -m pytest -v
 .venv/Scripts/python.exe -m ruff check src tests
 ```
+
+Menjalankan backend `onnx` dengan bobot asli. Ekspor berjalan di `.venv-train/`
+karena memerlukan torch, dan perlu `onnx`, `onnxscript`, serta `onnxruntime`
+yang sengaja tidak ada di requirements mana pun — image serving hanya boleh
+memuat onnxruntime:
+
+```bash
+uv pip install --python .venv-train/Scripts/python.exe onnx onnxscript onnxruntime==1.20.1
+.venv-train/Scripts/python.exe -m training.export_onnx
+NEUTRAL_MODEL_BACKEND=onnx .venv/Scripts/python.exe -m uvicorn neutral.app:app
+```
+
+Ekspor menulis `models/current/` dan menolak selesai bila tokenizer jalur
+serving berbeda dari jalur training, atau bila logit ONNX menyimpang lebih dari
+1e-3 dari PyTorch. Keduanya adalah kegagalan yang tidak memunculkan error
+sendiri.
 
 ## Menjalankan lewat Docker
 
@@ -75,7 +97,7 @@ Seluruh konfigurasi dibaca dari environment variable berawalan `NEUTRAL_`.
 | Variable | Default | Keterangan |
 |---|---|---|
 | `NEUTRAL_MODEL_BACKEND` | `stub` | `stub` atau `onnx` |
-| `NEUTRAL_MODEL_DIR` | `models/current` | Lokasi `model.onnx`, `tokenizer.json`, `metadata.json` |
+| `NEUTRAL_MODEL_DIR` | `models/current` | Lokasi `model.onnx`, `model.onnx.data`, `tokenizer.json`, `metadata.json` |
 | `NEUTRAL_DECISION_THRESHOLD` | `0.5` | Ambang probabilitas untuk label `biased` |
 | `NEUTRAL_TEMPERATURE` | `1.0` | Temperature hasil kalibrasi |
 | `NEUTRAL_MAX_CHARS` | `50000` | Batas ukuran teks per request |
