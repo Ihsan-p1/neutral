@@ -12,3 +12,10 @@ runs/
 .env
 .DS_Store
 data/
+
+# AI assistant files, local only
+CLAUDE.md
+.claude/
+docs/superpowers/
+AUDIT.md
+docs/handoff.md

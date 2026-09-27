@@ -4,8 +4,13 @@ Sentence-level lexical bias detection for English news. It measures how neutrall
 sentence is worded, not whether its content is factually true.
 
 Status: in development. The serving layer was built first against a stub classifier. The
-DeBERTa model has been trained and evaluated (see Evaluation results below), but it has not
-been exported to ONNX yet, so the running application still uses the stub.
+DeBERTa model has been trained, evaluated (see Evaluation results below), and exported to
+fp32 ONNX by `training/export_onnx.py`, so the `onnx` backend now runs on the real weights.
+
+The weights and the export are gitignored and do not travel with a clone. The default is
+still `stub`; to run the real model, export first (see Running locally) and set
+`NEUTRAL_MODEL_BACKEND=onnx`. The shipped temperature is 1.0 — calibration is M4b and has
+not run, so the probabilities are valid as a ranking but are not calibrated.
 
 ## Documents
 
@@ -31,6 +36,21 @@ Tests:
 .venv/Scripts/python.exe -m pytest -v
 .venv/Scripts/python.exe -m ruff check src tests
 ```
+
+Running the `onnx` backend on the real weights. The export runs in `.venv-train/`
+because it needs torch, and wants `onnx`, `onnxscript` and `onnxruntime`, which are
+deliberately absent from every requirements file — the serving image may carry
+onnxruntime and nothing else:
+
+```bash
+uv pip install --python .venv-train/Scripts/python.exe onnx onnxscript onnxruntime==1.20.1
+.venv-train/Scripts/python.exe -m training.export_onnx
+NEUTRAL_MODEL_BACKEND=onnx .venv/Scripts/python.exe -m uvicorn neutral.app:app
+```
+
+The export writes `models/current/` and refuses to finish if the serving tokenizer
+disagrees with the training one, or if the ONNX logits drift more than 1e-3 from
+PyTorch. Both are failures that raise nothing on their own.
 
 ## Running in Docker
 
@@ -71,7 +91,7 @@ Every setting is read from an environment variable prefixed `NEUTRAL_`.
 | Variable | Default | Meaning |
 |---|---|---|
 | `NEUTRAL_MODEL_BACKEND` | `stub` | `stub` or `onnx` |
-| `NEUTRAL_MODEL_DIR` | `models/current` | Location of `model.onnx`, `tokenizer.json`, `metadata.json` |
+| `NEUTRAL_MODEL_DIR` | `models/current` | Location of `model.onnx`, `model.onnx.data`, `tokenizer.json`, `metadata.json` |
 | `NEUTRAL_DECISION_THRESHOLD` | `0.5` | Probability threshold for the `biased` label |
 | `NEUTRAL_TEMPERATURE` | `1.0` | Calibrated temperature |
 | `NEUTRAL_MAX_CHARS` | `50000` | Text size limit per request |
@@ -184,8 +204,15 @@ The full reading, including what must not be concluded from these numbers, is in
 
 While `NEUTRAL_MODEL_BACKEND=stub`, every number the app displays has no predictive value
 at all. The stub is deterministic on the sentence text, which makes the pipeline and API
-fully testable, but its output is not bias analysis. The numbers start meaning something
-once the `onnx` backend runs with trained weights.
+fully testable, but its output is not bias analysis. That is still the default, so a fresh
+clone shows meaningless numbers until the export is run.
+
+On the `onnx` backend the numbers mean what the evaluation measured, which is narrower than
+it looks. 0.8477 macro-F1 is the BABE figure. On BASIL, a second corpus, the same checkpoint
+reaches 0.5854 against a 0.4868 all-neutral floor — 0.079 above predicting nothing. The
+BABE number alone overstates what the served model does, so the two belong together
+wherever either is quoted. The temperature is also uncalibrated at 1.0 until M4b runs, so
+the probabilities rank correctly but their absolute values do not mean what they appear to.
 
 Limitations that still apply once the model is in place:
 
