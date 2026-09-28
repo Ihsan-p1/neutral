@@ -17,8 +17,6 @@ not run, so the probabilities are valid as a ranking but are not calibrated.
 | Document | Contents |
 |---|---|
 | [PRD](PRD_Media_Neutrality_Classifier.md) | Problem statement, scope, dataset, metrics, milestones |
-| [Deployment design](docs/superpowers/specs/2026-08-27-media-neutrality-deploy-design.md) | Serving architecture, API contract, container, portability |
-| [Implementation plan](docs/superpowers/plans/2026-08-27-serving-foundation.md) | Task-by-task plan for the serving layer |
 
 ## Running locally
 
@@ -120,8 +118,7 @@ leaks: 384 of its 2,151 group keys appear in both train and test. The 0.78 targe
 literature was computed on it.
 
 Only macro F1 on BABE folds was measured. Cross-dataset generalisation, calibration, and a
-held-out set of recent news were not. Details in
-[section 12 of the M2 design](docs/superpowers/specs/2026-08-28-training-m2-finetune-design.md).
+held-out set of recent news were not.
 
 ### M3: NELA baseline
 
@@ -159,8 +156,7 @@ extraction time.
 Those four standard deviations do not measure the same thing. DeBERTa's mixes fold-to-fold
 and seed-to-seed spread over 25 runs; the three logistic regressions report fold-to-fold
 spread over 5 runs only, because lbfgs on fixed data is deterministic. The comparable
-quantity is the per-fold mean, and the deltas in the table are read from those. Details in
-[section 11 of the M3 design](docs/superpowers/specs/2026-08-29-training-m3-nela-design.md).
+quantity is the per-fold mean, and the deltas in the table are read from those.
 
 `nela-features==3.0.1` provides 87 features, not the 141 written in the first version of the
 PRD. 141 is the figure from Horne et al. 2018.
@@ -196,9 +192,6 @@ Three things are reported alongside those numbers:
   random, which means it moves nothing.
 - The numbers come from one checkpoint, not a mean over seeds. M2 measured 0.0187 of
   seed-to-seed spread on BABE; the spread on BASIL was not measured.
-
-The full reading, including what must not be concluded from these numbers, is in
-[section 11 of the M4a design](docs/superpowers/specs/2026-08-31-training-m4a-basil-design.md).
 
 ## Limitations
 
@@ -250,4 +243,5 @@ If you use the dataset, cite the paper:
 
 ## Licence
 
-Not decided yet.
+The code is MIT; see [LICENSE](LICENSE). It does not cover BABE or BASIL, which this
+repository does not redistribute, or model weights trained on them.
