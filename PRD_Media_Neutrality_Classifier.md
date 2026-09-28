@@ -4,7 +4,6 @@
 **Status:** Draft v2 — direvisi 2026-08-27 setelah sesi desain
 **Compute target:** Local — Intel i5-13th Gen HX, RTX 3050 6GB VRAM, 20GB RAM
 **Timeline:** Fleksibel, milestone sebagai checkpoint progres bukan hard deadline
-**Desain serving/deployment:** `docs/superpowers/specs/2026-08-27-media-neutrality-deploy-design.md`
 
 > **Perubahan utama dari v1** — taxonomy turun dari 3 kelas ke biner karena kelas
 > ketiga tidak punya data latih; split wajib per-artikel untuk mencegah kebocoran;
