@@ -57,6 +57,10 @@ docker build -t neutral .
 docker run --rm -p 8000:8000 neutral
 ```
 
+The default build bakes `models/current/` into the image, so run the ONNX export first.
+Without the weights, `docker build --target stub -t neutral .` builds the stub image that CI
+tests.
+
 The port comes from `$PORT`, so the same image runs on HF Spaces (7860), Cloud Run and Fly
 (8080), or any VPS without a change:
 

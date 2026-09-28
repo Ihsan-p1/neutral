@@ -9,5 +9,6 @@ __pycache__/
 tests/
 training/
 docs/
-models/
+models/*
+!models/current
 *.md

@@ -27,7 +27,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build image
-        run: docker build -t neutral:ci .
+        # Stub target: the weights are not in git. The default target is onnx.
+        run: docker build --target stub -t neutral:ci .
 
       - name: Report image size
         run: |
