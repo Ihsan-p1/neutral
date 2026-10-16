@@ -59,7 +59,7 @@ class StubClassifier:
 
 
 class OnnxClassifier:
-    """Production classifier backed by a quantized ONNX model."""
+    """Production classifier backed by an fp32 ONNX model."""
 
     def __init__(self, model_dir: str, temperature: float, version: str):
         import onnxruntime as ort
