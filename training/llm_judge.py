@@ -16,7 +16,9 @@ from collections.abc import Callable
 
 MODEL_TAG = "qwen3:4b-instruct-2507-q4_K_M"
 PROMPT_VERSION = "v1"
-OLLAMA_URL = "http://localhost:11434"
+# Not "localhost": on Windows it resolves to ::1 first and each call waits about
+# 2 s before falling back to IPv4, where Ollama listens.
+OLLAMA_URL = "http://127.0.0.1:11434"
 TIMEOUT_S = 60
 
 LABEL_SCHEMA = {

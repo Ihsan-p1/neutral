@@ -120,3 +120,9 @@ def test_trace_has_no_text():
     }
     assert SENTENCE not in json.dumps(record)
     assert record["n_chars"] == len(SENTENCE)
+
+
+def test_ollama_url_avoids_localhost():
+    # On Windows "localhost" tries ::1 first and waits about 2 s per call before
+    # falling back to IPv4, which Ollama listens on (measured 2026-10-19).
+    assert llm_judge.OLLAMA_URL == "http://127.0.0.1:11434"
