@@ -16,12 +16,15 @@ import dataclasses
 import hashlib
 import json
 import pathlib
+import platform
 import random
+import subprocess
 import time
 
 import numpy as np
 
 from neutral.classifier import OnnxClassifier
+from training import m8_report
 from training.basil import load_basil
 from training.data import load_babe
 from training.llm_judge import (
@@ -46,6 +49,8 @@ N_FOLDS = 5
 SAMPLE_FILE = RUNS / "m8_basil_sample.json"
 SAMPLE_HOURS_LIMIT = 4.0
 SAMPLE_SIZE = 1500
+REPORT_PATH = RUNS / "m8_report.txt"
+TRACES_PATH = RUNS / "m8_traces.jsonl"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -242,6 +247,49 @@ def run_warm(datasets: dict[str, Dataset]) -> None:
     print(f"warm done          : judged {len(pending)}, label None {failures}")
 
 
+def _environment_lines() -> list[str]:
+    try:
+        ollama = subprocess.run(["ollama", "--version"], capture_output=True, text=True,
+                                timeout=30).stdout.strip().splitlines()[-1]
+    except (OSError, subprocess.SubprocessError, IndexError):
+        ollama = "unknown"
+    return [
+        f"cpu / platform     : {platform.processor()} / {platform.platform()}",
+        f"ollama             : {ollama}",
+        f"LLM / prompt       : {MODEL_TAG} / {PROMPT_VERSION}",
+        f"DeBERTa            : {_model_version()} (ONNX, CPU, temperature 1.0)",
+    ]
+
+
+def run_report(datasets: dict[str, Dataset], scores: dict) -> None:
+    """Every table from cached scores and answers; never calls a model."""
+    cache = JudgeCache(JUDGE_CACHE)
+    sample = json.loads(SAMPLE_FILE.read_text(encoding="utf-8"))
+    fold0, fold1 = datasets["babe_fold0"], datasets["babe_fold1"]
+    p0, lat0 = scores["babe_fold0"]
+    llm0 = m8_report.llm_arrays(fold0.texts, cache, "babe_fold0")
+    llm1 = m8_report.llm_arrays(fold1.texts, cache, "babe_fold1")
+    tau = m8_report.tuned_tau(scores["babe_fold1"][0], fold1.labels, llm1["labels"])
+    babe_lines, cost, raw_traces = m8_report.babe_block(fold0, p0, lat0, llm0, tau)
+
+    full = datasets["basil_test"]
+    idx = sample["indices"]
+    basil = Dataset("basil_test", [full.texts[i] for i in idx], full.labels[idx],
+                    [full.groups[i] for i in idx])
+    llm_basil = m8_report.llm_arrays(basil.texts, cache, "basil_test")
+    basil_lines = m8_report.basil_block(
+        p0, fold0.labels, basil, scores["basil_test"][0][idx],
+        datasets["basil_dev"], scores["basil_dev"][0], llm_basil, sample)
+
+    lines = [*_environment_lines(), "", *babe_lines, "", *basil_lines, "",
+             *m8_report.cost_block(cost)]
+    report = "\n".join(lines)
+    print(report)
+    REPORT_PATH.write_text(report + "\n", encoding="utf-8")
+    m8_report.write_traces(TRACES_PATH, fold0, lat0, cache, raw_traces)
+    print(f"\nwritten            : {REPORT_PATH}, {TRACES_PATH}")
+
+
 def _self_check() -> None:
     labels = np.array([1] * 20 + [0] * 2000)
     ds = Dataset("synthetic", ["x"] * len(labels), labels, ["g"] * len(labels))
@@ -257,16 +305,19 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--pilot", action="store_true")
     parser.add_argument("--warm", action="store_true")
+    parser.add_argument("--report", action="store_true")
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
     if args.self_check:
         _self_check()
         return
-    datasets, _ = prepare()
+    datasets, scores = prepare()
     if args.pilot:
         run_pilot(datasets)
     if args.warm:
         run_warm(datasets)
+    if args.report:
+        run_report(datasets, scores)
 
 
 if __name__ == "__main__":
