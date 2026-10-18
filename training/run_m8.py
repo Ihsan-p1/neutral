@@ -16,6 +16,7 @@ import dataclasses
 import hashlib
 import json
 import pathlib
+import random
 import time
 
 import numpy as np
@@ -42,6 +43,9 @@ JUDGE_CACHE = RUNS / "m8_judge.jsonl"
 REPRODUCTION_TOLERANCE = 0.01
 PILOT_SIZE = 50
 N_FOLDS = 5
+SAMPLE_FILE = RUNS / "m8_basil_sample.json"
+SAMPLE_HOURS_LIMIT = 4.0
+SAMPLE_SIZE = 1500
 
 
 @dataclasses.dataclass(frozen=True)
@@ -185,13 +189,84 @@ def run_pilot(datasets: dict[str, Dataset]) -> None:
     print(f"projected hours    : {total * p50 / 3600:.1f} for {total} sentences at p50")
 
 
+def basil_test_sample(ds: Dataset, projected_hours: float) -> list[int]:
+    """All rows when the run fits the budget, else every positive plus sampled negatives."""
+    every = list(range(len(ds.texts)))
+    if projected_hours <= SAMPLE_HOURS_LIMIT:
+        return every
+    positives = [i for i in every if ds.labels[i] == 1]
+    negatives = [i for i in every if ds.labels[i] == 0]
+    drawn = random.Random(0).sample(negatives, SAMPLE_SIZE - len(positives))
+    return sorted(positives + drawn)
+
+
+def _projected_hours(datasets: dict[str, Dataset], cache: JudgeCache) -> float:
+    pilot = datasets["babe_fold1"]
+    latencies = [cache.get(pilot.texts[i]).latency_s for i in pilot_indices(pilot)
+                 if cache.get(pilot.texts[i]) is not None]
+    if not latencies:
+        raise RuntimeError("no pilot answers in the cache; run --pilot first")
+    total = sum(len(datasets[n].texts) for n in ("babe_fold0", "babe_fold1", "basil_test"))
+    return total * percentile(latencies, 50) / 3600
+
+
+def run_warm(datasets: dict[str, Dataset]) -> None:
+    """Judge every sentence M8 needs that is not cached yet. Safe to interrupt."""
+    check_ollama()
+    cache = JudgeCache(JUDGE_CACHE)
+    hours = _projected_hours(datasets, cache)
+    basil = datasets["basil_test"]
+    sample = basil_test_sample(basil, hours)
+    SAMPLE_FILE.write_text(json.dumps({
+        "indices": sample,
+        "n_positive": int(basil.labels[sample].sum()),
+        "prior": float(basil.labels[sample].mean()),
+        "full": len(sample) == len(basil.texts),
+        "projected_hours": hours,
+    }), encoding="utf-8")
+    todo = [*datasets["babe_fold0"].texts, *datasets["babe_fold1"].texts,
+            *(basil.texts[i] for i in sample)]
+    pending = [text for text in todo if cache.get(text) is None]
+    print(f"warm               : {len(todo)} needed, {len(pending)} not cached, "
+          f"BASIL sample {len(sample)} of {len(basil.texts)}")
+    failures = 0
+    for done, text in enumerate(pending, start=1):
+        result = judge(text)
+        # A transport error is not an answer: leave it uncached so the next run retries.
+        if result.error in (None, "unparseable"):
+            cache.put(text, result)
+        if result.label is None:
+            failures += 1
+        if done % 100 == 0:
+            print(f"warm progress      : {done} of {len(pending)}, failures {failures}")
+    print(f"warm done          : judged {len(pending)}, label None {failures}")
+
+
+def _self_check() -> None:
+    labels = np.array([1] * 20 + [0] * 2000)
+    ds = Dataset("synthetic", ["x"] * len(labels), labels, ["g"] * len(labels))
+    sample = basil_test_sample(ds, 5.0)
+    assert len(sample) == SAMPLE_SIZE
+    assert set(range(20)) <= set(sample)
+    assert sample == basil_test_sample(ds, 5.0)
+    assert basil_test_sample(ds, 3.0) == list(range(len(labels)))
+    print("self-check ok")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--pilot", action="store_true")
+    parser.add_argument("--warm", action="store_true")
+    parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args()
+    if args.self_check:
+        _self_check()
+        return
     datasets, _ = prepare()
     if args.pilot:
         run_pilot(datasets)
+    if args.warm:
+        run_warm(datasets)
 
 
 if __name__ == "__main__":
