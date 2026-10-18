@@ -279,7 +279,7 @@ def run_report(datasets: dict[str, Dataset], scores: dict) -> None:
     llm_basil = m8_report.llm_arrays(basil.texts, cache, "basil_test")
     basil_lines = m8_report.basil_block(
         p0, fold0.labels, basil, scores["basil_test"][0][idx],
-        datasets["basil_dev"], scores["basil_dev"][0], llm_basil, sample)
+        datasets["basil_dev"], scores["basil_dev"][0], llm_basil, sample, tau)
 
     lines = [*_environment_lines(), "", *babe_lines, "", *basil_lines, "",
              *m8_report.cost_block(cost)]

@@ -9,7 +9,8 @@ against a 95% target, over 100 splits by article. On BASIL (other outlets, other
 the guarantee breaks for biased sentences: 71.0% instead of 95%.
 
 **Passing the unsure sentences to a local LLM does not help.** A router that sends them to
-Qwen3-4B scores 0.850 macro F1, below 0.877 for the fine-tuned model alone. Details in
+Qwen3-4B scores 0.850 macro F1 against 0.877 for the fine-tuned model alone on BABE, and
+0.536 against 0.566 on BASIL. On BABE that gap is within noise at this sample size. Details in
 [M8](#m8-the-model-knows-when-it-is-unsure-an-llm-does-not-fix-it).
 
 Status: in development. The serving layer was built first against a stub classifier. The
@@ -216,8 +217,8 @@ sentence -> DeBERTa (ONNX, CPU) -> prediction set
 
 Split conformal prediction on the served checkpoint, α = 0.05. The threshold is calibrated
 on half of BABE fold 0 and tested on the other half, split by article, 100 times. Qwen3 is
-`qwen3:4b-instruct-2507-q4_K_M` with one fixed prompt (v1), tuned only on fold 1. The run
-is offline; the API is unchanged.
+`qwen3:4b-instruct-2507-q4_K_M` with one fixed prompt (v1), checked on 50 fold-1 sentences
+before fold 0 was opened. The run is offline; the API is unchanged.
 
 BABE fold 0, mean ± sd over 100 splits:
 
@@ -227,7 +228,11 @@ BABE fold 0, mean ± sd over 100 splits:
 | Qwen3 only | 0.7925 ± 0.0186 | – | 100% |
 | Router, conformal | 0.8497 ± 0.0157 | 0.9523 ± 0.0159 | 25.0% |
 | Router, per-class conformal | 0.8482 ± 0.0189 | 0.9539 ± 0.0164 | 25.9% |
-| Router, confidence < 0.59 (tuned on fold 1) | 0.8732 ± 0.0160 | – | 5.4% |
+| Router, confidence < 0.9 (fixed) | 0.8472 ± 0.0175 | 0.9635 ± 0.0064 | 29.2% |
+| Router, confidence < 0.59 (tuned on fold 1) | 0.8732 ± 0.0160 | 0.8998 ± 0.0123 | 5.4% |
+
+Coverage for a confidence threshold is the coverage of the sets it implies (a label is kept
+when its probability is at least 1 − τ).
 
 BASIL test (5,780 sentences, 5.1% biased), threshold from BABE unless stated:
 
@@ -235,7 +240,10 @@ BASIL test (5,780 sentences, 5.1% biased), threshold from BABE unless stated:
 |---|---|---|---|---|
 | DeBERTa only | 0.5656 | – | – | – |
 | Qwen3 only | 0.4738 | – | – | 100% |
+| Router, confidence < 0.9 (fixed) | 0.5279 | 0.9303 | 0.7677 | 36.4% |
+| Router, confidence < 0.59 (tuned on fold 1) | 0.5596 | 0.8420 | 0.5522 | 4.7% |
 | Router, conformal | 0.5356 | 0.9189 | 0.7104 | 30.6% |
+| Router, per-class conformal | 0.5342 | 0.9192 | 0.7172 | 31.1% |
 | Router, conformal, recalibrated on BASIL dev | 0.5088 | 0.9528 | 0.8418 | 51.1% |
 | Router, per-class, recalibrated on BASIL dev | 0.4840 | 0.9486 | 0.9057 | 69.0% |
 
@@ -246,21 +254,24 @@ What this shows:
   sentences. Recalibrating on BASIL's dev events (30% of events, 2,197 sentences) brings biased coverage back to 84.2%, or 90.6%
   per class, at the price of sending half or more of the sentences to the LLM.
 - Qwen3-4B is the weaker model here: 0.79 against 0.88 on BABE and 0.47 against 0.57 on
-  BASIL. Every sentence the router hands over costs F1. The router still beats Qwen3 alone
+  BASIL (BASIL figures are single values, no interval). Every router row on BASIL scores
+  below DeBERTa alone; the closest is τ = 0.59, which forwards 4.7%. The router still beats Qwen3 alone
   (paired bootstrap, F1 difference +0.057, 95% CI +0.021 to +0.098). Against DeBERTa alone
   the difference is −0.028 with a CI of −0.073 to +0.016, too wide to call either way.
 - With two classes, a conformal router routes exactly like "send it on if confidence is
   below τ" for one τ. Conformal adds a way to choose τ with a stated coverage, not a
-  different routing rule. A τ tuned for F1 on fold 1 sends only 5.4% of sentences and
-  stays close to DeBERTa (0.873).
+  different routing rule. What the choice buys shows in coverage. A τ tuned for F1 on fold 1
+  sends only 5.4% of sentences and stays close to DeBERTa (0.873), but covers 90.0% on BABE
+  and 55.2% of biased BASIL sentences. A hand-picked τ = 0.9 over-covers on BABE (96.4%)
+  and forwards more. Conformal lands on the target it was given.
 - The share sent to Qwen3 does not shrink steadily as α grows (25.0%, 6.0%, 4.7%, 12.3%
   for α 0.05 to 0.20). Above a threshold of 0.5 the forwarded sentences are the two-label
   sets; below it they are the empty ones.
 - Cost per 1,000 sentences on this laptop (i5-13450HX, RTX 3050 6 GB): DeBERTa 38 s,
   router 138 s, Qwen3 alone 401 s. p95 latency is 55 ms, 466 ms and 462 ms.
 
-Limits: one prompt version, tuned on 50 sentences; one 4B model at 4-bit; one DeBERTa
-checkpoint. A stronger LLM or a better prompt could change the second finding, not the first.
+Limits: one prompt version, checked on 50 sentences; one 4B model at 4-bit; one DeBERTa
+checkpoint; BASIL figures have no confidence intervals. A stronger LLM or a better prompt could change the second finding, not the first.
 
 Reproduce (needs Ollama with the model pulled, about 50 minutes for the Qwen3 pass):
 

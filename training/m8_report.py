@@ -44,6 +44,21 @@ def router_predictions(
     return np.where(use_llm, llm, deberta), forward & (llm < 0)
 
 
+def answer_labels(sets: list[frozenset[int]], deberta: np.ndarray) -> np.ndarray:
+    """The set's label where it has exactly one, DeBERTa's argmax otherwise.
+
+    With per-class q-hats a one-label set can disagree with the argmax; spec 4.2
+    says the router answers with the label in the set.
+    """
+    return np.array([next(iter(s)) if len(s) == 1 else int(d)
+                     for s, d in zip(sets, deberta, strict=True)])
+
+
+def tau_sets(p_biased: np.ndarray, tau: float) -> list[frozenset[int]]:
+    """Sets implied by "forward when max(p) < tau": the marginal rule with q-hat = tau."""
+    return prediction_sets(p_biased, tau)
+
+
 def mode_metrics(gold: np.ndarray, pred: np.ndarray, forward: np.ndarray | None) -> dict:
     metrics = {"f1": f1_macro(gold, pred), "forwarded": None, "singleton_error": None}
     if forward is not None:
@@ -88,17 +103,15 @@ def _fmt(values: list[float | None], digits: int = 4) -> str:
     return f"{np.mean(present):.{digits}f} ± {np.std(present):.{digits}f}"
 
 
-def _routers(p_cal, y_cal, p_te, tau, alpha=ALPHA) -> dict[str, tuple[np.ndarray, list | None]]:
-    """Forward mask and prediction sets (None for threshold routers) per router."""
-    marginal = prediction_sets(p_te, marginal_qhat(p_cal, y_cal, alpha))
-    mondrian = mondrian_sets(p_te, mondrian_qhats(p_cal, y_cal, alpha))
-    confidence = np.maximum(p_te, 1 - p_te)
-    return {
-        "router marginal": (forward_mask(marginal), marginal),
-        "router Mondrian": (forward_mask(mondrian), mondrian),
-        f"router tau {FIXED_TAU}": (confidence < FIXED_TAU, None),
-        f"router tau {tau:.2f} (fold 1)": (confidence < tau, None),
+def _routers(p_cal, y_cal, p_te, tau, alpha=ALPHA) -> dict[str, tuple[np.ndarray, list]]:
+    """Forward mask and prediction sets per router; tau routers carry their implied sets."""
+    routers = {
+        "router marginal": prediction_sets(p_te, marginal_qhat(p_cal, y_cal, alpha)),
+        "router Mondrian": mondrian_sets(p_te, mondrian_qhats(p_cal, y_cal, alpha)),
+        f"router tau {FIXED_TAU}": tau_sets(p_te, FIXED_TAU),
+        f"router tau {tau:.2f} (fold 1)": tau_sets(p_te, tau),
     }
+    return {name: (forward_mask(sets), sets) for name, sets in routers.items()}
 
 
 def _row_values(gold, pred, forward, sets, fallback) -> dict:
@@ -129,7 +142,7 @@ def babe_block(fold0, p0, lat0, llm0, tau) -> tuple[list[str], dict, list[dict]]
         modes = {"DeBERTa only": (deb, None, None, None),
                  "Qwen3 only": (qwen, None, None, qwen_fallback)}
         for name, (forward, sets) in _routers(p0[cal], fold0.labels[cal], p0[te], tau).items():
-            pred, fallback = router_predictions(deb, llm, forward)
+            pred, fallback = router_predictions(answer_labels(sets, deb), llm, forward)
             modes[name] = (pred, forward, sets, fallback)
         for name, (pred, forward, sets, fallback) in modes.items():
             row = rows.setdefault(name, {})
@@ -177,18 +190,22 @@ def babe_block(fold0, p0, lat0, llm0, tau) -> tuple[list[str], dict, list[dict]]
     return lines, cost_summary, traces
 
 
-def basil_block(p0, y0, basil, p_te, dev, p_dev, llm, sample_info) -> list[str]:
+def basil_block(p0, y0, basil, p_te, dev, p_dev, llm, sample_info, tau) -> list[str]:
     gold, deb = basil.labels, (p_te >= 0.5).astype(int)
     qwen, _ = router_predictions(deb, llm["labels"], np.ones(len(gold), dtype=bool))
     entries = {"DeBERTa only (argmax)": (deb, None, None), "Qwen3 only": (qwen, None, None)}
     calibrations = {"BABE q-hat": (p0, y0), "BASIL dev q-hat": (p_dev, dev.labels)}
+    routers = {f"router tau {FIXED_TAU}": tau_sets(p_te, FIXED_TAU),
+               f"router tau {tau:.2f} (fold 1)": tau_sets(p_te, tau)}
     for label, (p_cal, y_cal) in calibrations.items():
-        marginal = prediction_sets(p_te, marginal_qhat(p_cal, y_cal, ALPHA))
-        mondrian = mondrian_sets(p_te, mondrian_qhats(p_cal, y_cal, ALPHA))
-        for kind, sets in (("marginal", marginal), ("Mondrian", mondrian)):
-            forward = forward_mask(sets)
-            entries[f"router {kind}, {label}"] = (
-                router_predictions(deb, llm["labels"], forward)[0], forward, sets)
+        routers[f"router marginal, {label}"] = prediction_sets(
+            p_te, marginal_qhat(p_cal, y_cal, ALPHA))
+        routers[f"router Mondrian, {label}"] = mondrian_sets(
+            p_te, mondrian_qhats(p_cal, y_cal, ALPHA))
+    for name, sets in routers.items():
+        forward = forward_mask(sets)
+        pred, _ = router_predictions(answer_labels(sets, deb), llm["labels"], forward)
+        entries[name] = (pred, forward, sets)
     lines = [f"BASIL test, {len(gold)} sentences ({'full' if sample_info['full'] else 'sample'}), "
              f"biased prior {gold.mean():.3f}; calibration rows: BABE fold 0 {len(y0)}, "
              f"BASIL dev {len(dev.labels)} ({int(dev.labels.sum())} biased)",

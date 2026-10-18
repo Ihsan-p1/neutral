@@ -57,7 +57,7 @@ def check_ollama(
     try:
         tags = transport(f"{url}/api/tags", None, 10)
     except Exception as exc:
-        raise RuntimeError(f"Ollama is not reachable at {url}: {exc}") from exc
+        raise RuntimeError(f"Ollama is not reachable at {url} (model {model}): {exc}") from exc
     names = {entry.get("name") for entry in tags.get("models", [])}
     if model not in names:
         raise RuntimeError(f"model {model} is not installed; run: ollama pull {model}")

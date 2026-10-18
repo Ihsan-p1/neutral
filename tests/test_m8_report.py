@@ -28,3 +28,23 @@ def test_mode_metrics_without_routing():
     assert metrics["f1"] == 1.0
     assert metrics["forwarded"] is None
     assert metrics["singleton_error"] is None
+
+
+def test_singleton_answer_is_the_set_label():
+    # Per-class q-hats can give a one-label set that disagrees with the argmax.
+    from training.conformal import mondrian_sets
+    from training.m8_report import answer_labels
+
+    sets = mondrian_sets(np.array([0.4]), {0: 0.3, 1: 0.8})
+    assert sets == [frozenset({1})]
+    assert answer_labels(sets, np.array([0])).tolist() == [1]
+
+
+def test_tau_router_sets_match_threshold():
+    from training.conformal import forward_mask
+    from training.m8_report import tau_sets
+
+    p = np.random.default_rng(0).uniform(size=1000)
+    for tau in (0.59, 0.9):
+        expected = np.maximum(p, 1 - p) < tau
+        assert forward_mask(tau_sets(p, tau)).tolist() == expected.tolist()

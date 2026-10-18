@@ -126,3 +126,8 @@ def test_ollama_url_avoids_localhost():
     # On Windows "localhost" tries ::1 first and waits about 2 s per call before
     # falling back to IPv4, which Ollama listens on (measured 2026-10-19).
     assert llm_judge.OLLAMA_URL == "http://127.0.0.1:11434"
+
+
+def test_check_ollama_unreachable_names_tag():
+    with pytest.raises(RuntimeError, match="qwen3:4b-instruct-2507-q4_K_M"):
+        check_ollama(FakeTransport(error=URLError("refused")))
