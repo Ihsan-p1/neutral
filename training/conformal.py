@@ -11,6 +11,8 @@ import math
 
 import numpy as np
 
+from training.split import fold_of
+
 LABELS = (0, 1)
 
 
@@ -56,6 +58,40 @@ def _sets(p_biased: np.ndarray, qhats: dict[int, float]) -> list[frozenset[int]]
         frozenset(label for label in LABELS if row[label] >= 1 - qhats[label])
         for row in probs
     ]
+
+
+def mondrian_qhats(
+    p_biased: np.ndarray, labels: np.ndarray, alpha: float
+) -> dict[int, float]:
+    """One q-hat per class, each from that class's calibration rows only.
+
+    A class with too few rows gets infinity, so every sentence keeps that label
+    in its set and is forwarded. That is the honest answer for a rare class,
+    not an error.
+    """
+    probs = _label_probs(p_biased)
+    labels = np.asarray(labels, dtype=np.int64)
+    qhats: dict[int, float] = {}
+    for label in LABELS:
+        scores = 1 - probs[labels == label, label]
+        qhats[label] = conformal_quantile(scores, alpha) if len(scores) else math.inf
+    return qhats
+
+
+def mondrian_sets(p_biased: np.ndarray, qhats: dict[int, float]) -> list[frozenset[int]]:
+    """Label y is in the set when p(y) >= 1 - q-hat of class y."""
+    return _sets(p_biased, qhats)
+
+
+def calibration_split(group_keys: list[str], seed: int) -> tuple[list[int], list[int]]:
+    """Split row indices into calibration and test halves, whole articles at a time."""
+    cal: list[int] = []
+    test: list[int] = []
+    for index, key in enumerate(group_keys):
+        (cal if fold_of(key, 2, seed) == 0 else test).append(index)
+    if not cal or not test:
+        raise ValueError(f"empty side: calibration={len(cal)} test={len(test)}")
+    return cal, test
 
 
 def forward_mask(sets: list[frozenset[int]]) -> np.ndarray:

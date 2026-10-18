@@ -4,12 +4,15 @@ import numpy as np
 
 from neutral.classifier import softmax_with_temperature
 from training.conformal import (
+    calibration_split,
     conformal_quantile,
     coverage,
     coverage_by_class,
     equivalent_tau,
     forward_mask,
     marginal_qhat,
+    mondrian_qhats,
+    mondrian_sets,
     prediction_sets,
 )
 
@@ -67,3 +70,46 @@ def test_coverage_by_class():
     labels = np.array([1, 1, 0, 0])
     assert coverage(sets, labels) == 0.5
     assert coverage_by_class(sets, labels) == {0: (0.5, 2), 1: (0.5, 2)}
+
+
+def test_mondrian_uses_own_class():
+    p = np.array([0.9, 0.8, 0.7, 0.6, 0.95, 0.2, 0.1, 0.3, 0.05, 0.6])
+    labels = np.array([1, 1, 1, 1, 1, 0, 0, 0, 0, 0])
+    qhats = mondrian_qhats(p, labels, 0.2)
+    assert qhats[1] == conformal_quantile(1 - p[labels == 1], 0.2)
+    assert qhats[0] == conformal_quantile(p[labels == 0], 0.2)
+    assert qhats[0] != qhats[1]
+
+
+def test_mondrian_small_class_is_inf():
+    p = np.array([0.9, 0.8] + [0.1] * 50)
+    labels = np.array([1, 1] + [0] * 50)
+    qhats = mondrian_qhats(p, labels, 0.05)
+    assert qhats[1] == math.inf
+    assert all(1 in s for s in mondrian_sets(np.array([0.01, 0.5, 0.99]), qhats))
+
+
+def test_mondrian_differs_from_marginal():
+    rng = np.random.default_rng(0)
+    labels = (rng.uniform(size=4000) < 0.05).astype(int)
+    p = np.clip(rng.normal(0.35 + 0.3 * labels, 0.2), 0.001, 0.999)
+    cal, test = slice(0, 2000), slice(2000, 4000)
+    marginal = forward_mask(prediction_sets(p[test], marginal_qhat(p[cal], labels[cal], 0.1)))
+    mondrian = forward_mask(mondrian_sets(p[test], mondrian_qhats(p[cal], labels[cal], 0.1)))
+    assert (marginal != mondrian).any()
+
+
+def test_calibration_split_group_clean():
+    # 20 distinct articles, so no seed in 0-9 puts every key on one side.
+    keys = [f"article-{i % 20}" for i in range(80)]
+    for seed in range(10):
+        cal, test = calibration_split(keys, seed)
+        assert cal and test
+        assert sorted(cal + test) == list(range(len(keys)))
+        assert not {keys[i] for i in cal} & {keys[i] for i in test}
+
+
+def test_calibration_split_deterministic():
+    keys = [f"article-{i // 3}" for i in range(300)]
+    assert calibration_split(keys, 0) == calibration_split(keys, 0)
+    assert calibration_split(keys, 0) != calibration_split(keys, 1)
