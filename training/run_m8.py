@@ -211,10 +211,13 @@ def run_pilot(datasets: dict[str, Dataset]) -> None:
 def basil_test_sample(ds: Dataset, projected_hours: float) -> list[int]:
     """All rows when the run fits the budget, else every positive plus sampled negatives."""
     every = list(range(len(ds.texts)))
-    if projected_hours <= SAMPLE_HOURS_LIMIT:
+    if projected_hours <= SAMPLE_HOURS_LIMIT or len(every) <= SAMPLE_SIZE:
         return every
     positives = [i for i in every if ds.labels[i] == 1]
     negatives = [i for i in every if ds.labels[i] == 0]
+    if len(positives) >= SAMPLE_SIZE:
+        raise ValueError(f"{len(positives)} positives leave no room for negatives in a "
+                         f"{SAMPLE_SIZE}-row sample; raise SAMPLE_SIZE")
     drawn = random.Random(0).sample(negatives, SAMPLE_SIZE - len(positives))
     return sorted(positives + drawn)
 
@@ -302,6 +305,16 @@ def _self_check() -> None:
     assert set(range(20)) <= set(sample)
     assert sample == basil_test_sample(ds, 5.0)
     assert basil_test_sample(ds, 3.0) == list(range(len(labels)))
+    small = Dataset("small", ["x"] * 100, np.array([1] * 10 + [0] * 90), ["g"] * 100)
+    assert basil_test_sample(small, 5.0) == list(range(100))
+    crowded = Dataset("crowded", ["x"] * 3000, np.array([1] * SAMPLE_SIZE + [0] * 1500),
+                      ["g"] * 3000)
+    try:
+        basil_test_sample(crowded, 5.0)
+    except ValueError as exc:
+        assert "positives" in str(exc)
+    else:
+        raise AssertionError("a sample with no room for negatives must fail")
     print("self-check ok")
 
 
