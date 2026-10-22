@@ -34,6 +34,7 @@ from training.llm_judge import (
     cache_key,
     check_ollama,
     judge,
+    judge_pending,
 )
 from training.m8_stats import f1_macro, percentile
 from training.run_m4a import M2_FOLD0_F1, drop_babe_overlap, split_dev_test
@@ -234,16 +235,7 @@ def run_warm(datasets: dict[str, Dataset]) -> None:
     pending = [text for text in todo if cache.get(text) is None]
     print(f"warm               : {len(todo)} needed, {len(pending)} not cached, "
           f"BASIL sample {len(sample)} of {len(basil.texts)}")
-    failures = 0
-    for done, text in enumerate(pending, start=1):
-        result = judge(text)
-        # A transport error is not an answer: leave it uncached so the next run retries.
-        if result.error in (None, "unparseable"):
-            cache.put(text, result)
-        if result.label is None:
-            failures += 1
-        if done % 100 == 0:
-            print(f"warm progress      : {done} of {len(pending)}, failures {failures}")
+    failures = judge_pending(pending, cache)
     print(f"warm done          : judged {len(pending)}, label None {failures}")
 
 

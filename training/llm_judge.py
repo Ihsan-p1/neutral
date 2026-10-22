@@ -20,6 +20,8 @@ PROMPT_VERSION = "v1"
 # 2 s before falling back to IPv4, where Ollama listens.
 OLLAMA_URL = "http://127.0.0.1:11434"
 TIMEOUT_S = 60
+# Transport errors in a row before a warm run gives up: the server is gone.
+MAX_TRANSPORT_ERRORS = 3
 
 LABEL_SCHEMA = {
     "type": "object",
@@ -161,6 +163,36 @@ class JudgeCache:
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(line)
             handle.flush()
+
+
+def judge_pending(
+    texts: list[str], cache: JudgeCache, judge_fn: Callable[[str], JudgeResult] = judge
+) -> int:
+    """Judge and cache each text; returns how many came back without a label.
+
+    Raises once MAX_TRANSPORT_ERRORS calls in a row fail to reach the server, so a
+    dead Ollama stops the run instead of failing every remaining sentence.
+    """
+    failures = 0
+    in_a_row = 0
+    for done, text in enumerate(texts, start=1):
+        result = judge_fn(text)
+        # A transport error is not an answer: leave it uncached so the next run retries.
+        if result.error in (None, "unparseable"):
+            cache.put(text, result)
+            in_a_row = 0
+        else:
+            in_a_row += 1
+            if in_a_row >= MAX_TRANSPORT_ERRORS:
+                raise RuntimeError(
+                    f"{in_a_row} calls in a row failed ({result.error}) after {done} of "
+                    f"{len(texts)}; check Ollama, then rerun --warm to resume"
+                )
+        if result.label is None:
+            failures += 1
+        if done % 100 == 0:
+            print(f"warm progress      : {done} of {len(texts)}, failures {failures}")
+    return failures
 
 
 def route(set_size: int, deberta_label: int, llm: JudgeResult | None) -> tuple[int, str]:

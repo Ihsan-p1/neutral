@@ -6,11 +6,13 @@ import pytest
 from training import llm_judge
 from training.llm_judge import (
     LABEL_SCHEMA,
+    MAX_TRANSPORT_ERRORS,
     MODEL_TAG,
     JudgeCache,
     JudgeResult,
     check_ollama,
     judge,
+    judge_pending,
     parse_label,
     route,
     trace_record,
@@ -111,6 +113,42 @@ def test_cache_put_after_truncated_line_keeps_new_record(tmp_path):
     result = JudgeResult(label=0, latency_s=0.2, prompt_tokens=1, completion_tokens=1, error=None)
     JudgeCache(path).put(SENTENCE, result)
     assert JudgeCache(path).get(SENTENCE) == result
+
+
+def test_judge_pending_stops_when_ollama_dies(tmp_path):
+    answers = [
+        JudgeResult(label=1, latency_s=0.1, prompt_tokens=1, completion_tokens=1, error=None),
+        JudgeResult(label=None, latency_s=0.1, prompt_tokens=0, completion_tokens=0,
+                    error="unparseable"),
+    ] + [
+        JudgeResult(label=None, latency_s=0.1, prompt_tokens=0, completion_tokens=0,
+                    error="URLError"),
+    ] * 10
+    calls = []
+
+    def fake_judge(text):
+        calls.append(text)
+        return answers[len(calls) - 1]
+
+    cache = JudgeCache(tmp_path / "cache.jsonl")
+    texts = [f"sentence {i}" for i in range(len(answers))]
+    with pytest.raises(RuntimeError, match="--warm"):
+        judge_pending(texts, cache, fake_judge)
+    assert len(calls) == 2 + MAX_TRANSPORT_ERRORS
+    assert cache.get("sentence 0") is not None
+    assert cache.get("sentence 1") is not None
+    assert cache.get("sentence 2") is None
+
+
+def test_judge_pending_counts_label_none(tmp_path):
+    ok = JudgeResult(label=0, latency_s=0.1, prompt_tokens=1, completion_tokens=1, error=None)
+    lost = JudgeResult(label=None, latency_s=0.1, prompt_tokens=0, completion_tokens=0,
+                       error="TimeoutError")
+    results = iter([lost, ok, lost, ok])
+    cache = JudgeCache(tmp_path / "cache.jsonl")
+    failures = judge_pending(["a", "b", "c", "d"], cache, lambda text: next(results))
+    assert failures == 2
+    assert cache.get("a") is None and cache.get("b") == ok
 
 
 def test_route():
