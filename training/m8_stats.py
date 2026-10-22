@@ -51,6 +51,25 @@ def pooled_paired_bootstrap(
     return float(np.mean(diffs)), float(lo), float(hi)
 
 
+def bootstrap_f1(
+    gold: np.ndarray, pred: np.ndarray, groups: list[str], n_boot: int = 2000, seed: int = 0
+) -> tuple[float, float]:
+    """95% interval of F1 macro, resampling whole articles with replacement."""
+    rng = np.random.default_rng(seed)
+    gold, pred = np.asarray(gold), np.asarray(pred)
+    rows: dict[str, list[int]] = {}
+    for index, key in enumerate(groups):
+        rows.setdefault(key, []).append(index)
+    articles = [rows[key] for key in sorted(rows)]
+    scores = np.empty(n_boot)
+    for b in range(n_boot):
+        drawn = rng.choice(len(articles), size=len(articles), replace=True)
+        index = np.concatenate([articles[k] for k in drawn])
+        scores[b] = f1_macro(gold[index], pred[index])
+    lo, hi = np.percentile(scores, [2.5, 97.5])
+    return float(lo), float(hi)
+
+
 def equivalence_verdict(lo: float, hi: float, margin: float = 0.03) -> str:
     """"equivalent" if the interval sits inside +/-margin, "different" if it excludes 0."""
     if -margin <= lo and hi <= margin:

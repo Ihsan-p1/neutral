@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 
 from training.m8_stats import (
+    bootstrap_f1,
     equivalence_verdict,
     f1_macro,
     percentile,
@@ -38,6 +39,21 @@ def test_bootstrap_resamples_groups():
     _, lo, hi = first
     assert lo < hi
     assert pooled_paired_bootstrap([split], n_boot=500, seed=0) == first
+
+
+def test_bootstrap_f1_perfect_predictions():
+    gold = np.array([1, 0, 1, 0])
+    assert bootstrap_f1(gold, gold, ["a", "a", "b", "b"], n_boot=200) == (1.0, 1.0)
+
+
+def test_bootstrap_f1_brackets_point_estimate():
+    rng = np.random.default_rng(1)
+    gold = rng.integers(0, 2, size=400)
+    pred = np.where(rng.uniform(size=400) < 0.8, gold, 1 - gold)
+    groups = [f"article{i // 4}" for i in range(400)]
+    lo, hi = bootstrap_f1(gold, pred, groups, n_boot=500, seed=0)
+    assert lo < f1_macro(gold, pred) < hi
+    assert bootstrap_f1(gold, pred, groups, n_boot=500, seed=0) == (lo, hi)
 
 
 def test_verdict():

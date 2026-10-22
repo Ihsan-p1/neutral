@@ -22,6 +22,7 @@ from training.conformal import (
 )
 from training.llm_judge import JudgeCache, route, trace_record
 from training.m8_stats import (
+    bootstrap_f1,
     equivalence_verdict,
     f1_macro,
     percentile,
@@ -211,15 +212,16 @@ def basil_block(p0, y0, basil, p_te, dev, p_dev, llm, sample_info, tau) -> list[
              f"BASIL dev {len(dev.labels)} ({int(dev.labels.sum())} biased)",
              f"M4a reference, DeBERTa on full BASIL test: as-is {M4A_BASIL_F1[0]}, "
              f"dev-recalibrated threshold {M4A_BASIL_F1[1]}",
-             f"{'mode':34} {'F1 macro':>8} {'coverage':>8} {'cov neu':>8} {'cov bias':>8} "
-             f"{'forwarded':>9} {'single err':>10}"]
+             f"{'mode':34} {'F1 macro':>8} {'F1 95% CI, by article':>21} {'coverage':>8} "
+             f"{'cov neu':>8} {'cov bias':>8} {'forwarded':>9} {'single err':>10}"]
     for name, (pred, forward, sets) in entries.items():
         metrics = mode_metrics(gold, pred, forward)
         by_class = coverage_by_class(sets, gold) if sets is not None else {}
+        lo, hi = bootstrap_f1(gold, pred, basil.groups)
 
         def cell(value, width=8):
             return f"{value:>{width}.4f}" if value is not None else f"{'-':>{width}}"
-        lines.append(f"{name:34} {cell(metrics['f1'])} "
+        lines.append(f"{name:34} {cell(metrics['f1'])} {f'[{lo:.4f}, {hi:.4f}]':>21} "
                      f"{cell(coverage(sets, gold) if sets is not None else None)} "
                      f"{cell(by_class.get(0, (None,))[0])} {cell(by_class.get(1, (None,))[0])} "
                      f"{cell(metrics['forwarded'], 9)} {cell(metrics['singleton_error'], 10)}")
