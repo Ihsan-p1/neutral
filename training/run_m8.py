@@ -169,7 +169,6 @@ def pilot_indices(ds: Dataset) -> list[int]:
 
 
 def run_pilot(datasets: dict[str, Dataset]) -> None:
-    check_ollama()
     ds = datasets["babe_fold1"]
     cache = JudgeCache(JUDGE_CACHE)
     labels, gold, latencies, failures = [], [], [], 0
@@ -218,7 +217,6 @@ def _projected_hours(datasets: dict[str, Dataset], cache: JudgeCache) -> float:
 
 def run_warm(datasets: dict[str, Dataset]) -> None:
     """Judge every sentence M8 needs that is not cached yet. Safe to interrupt."""
-    check_ollama()
     cache = JudgeCache(JUDGE_CACHE)
     hours = _projected_hours(datasets, cache)
     basil = datasets["basil_test"]
@@ -303,6 +301,9 @@ def main() -> None:
     if args.self_check:
         _self_check()
         return
+    if args.pilot or args.warm:
+        # Before prepare(): scoring with DeBERTa takes minutes, a dead Ollama takes seconds.
+        check_ollama()
     datasets, scores = prepare()
     if args.pilot:
         run_pilot(datasets)
