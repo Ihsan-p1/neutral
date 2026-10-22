@@ -116,17 +116,31 @@ def score_deberta(texts: list[str]) -> tuple[np.ndarray, np.ndarray]:
     return probs, latencies
 
 
-def _texts_digest(texts: list[str]) -> str:
-    return hashlib.sha256("\n".join(texts).encode("utf-8")).hexdigest()
+def _model_fingerprint() -> str:
+    """Version plus size and mtime of every file in MODEL_DIR.
+
+    ponytail: stat, not a hash of the 703 MB weights; a copy with a new mtime
+    rescores needlessly, which is the safe direction.
+    """
+    parts = [_model_version()]
+    for path in sorted(MODEL_DIR.iterdir()):
+        stat = path.stat()
+        parts.append(f"{path.name}:{stat.st_size}:{stat.st_mtime_ns}")
+    return "|".join(parts)
+
+
+def _texts_digest(texts: list[str], model: str) -> str:
+    return hashlib.sha256("\n".join([model, *texts]).encode("utf-8")).hexdigest()
 
 
 def deberta_scores(datasets: dict[str, Dataset]) -> dict[str, tuple[np.ndarray, np.ndarray]]:
-    """Cached DeBERTa scores per dataset; recomputed when the texts change."""
+    """Cached DeBERTa scores per dataset; recomputed when the texts or the model change."""
     stored = dict(np.load(DEBERTA_CACHE, allow_pickle=False)) if DEBERTA_CACHE.exists() else {}
     result: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     changed = False
+    model = _model_fingerprint()
     for name, ds in datasets.items():
-        digest = _texts_digest(ds.texts)
+        digest = _texts_digest(ds.texts, model)
         if str(stored.get(f"{name}/digest", "")) != digest:
             print(f"DeBERTa scoring    : {name}, {len(ds.texts)} sentences")
             probs, latencies = score_deberta(ds.texts)
