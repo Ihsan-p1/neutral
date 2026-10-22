@@ -143,12 +143,23 @@ class JudgeCache:
     def get(self, sentence: str) -> JudgeResult | None:
         return self._load().get(cache_key(sentence))
 
+    def _ends_mid_line(self) -> bool:
+        """True when a killed write left the file without its final newline."""
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            return False
+        with self.path.open("rb") as handle:
+            handle.seek(-1, 2)
+            return handle.read(1) != b"\n"
+
     def put(self, sentence: str, result: JudgeResult) -> None:
         key = cache_key(sentence)
         self._load()[key] = result
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps({"key": key, **dataclasses.asdict(result)}) + "\n"
+        if self._ends_mid_line():
+            line = "\n" + line
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps({"key": key, **dataclasses.asdict(result)}) + "\n")
+            handle.write(line)
             handle.flush()
 
 

@@ -103,6 +103,16 @@ def test_cache_skips_truncated_last_line(tmp_path):
     assert JudgeCache(path).get(SENTENCE) == result
 
 
+def test_cache_put_after_truncated_line_keeps_new_record(tmp_path):
+    # A kill mid-write leaves a line with no newline; the next append must not
+    # glue its record onto that fragment.
+    path = tmp_path / "cache.jsonl"
+    path.write_text('{"key": "abc", "label"', encoding="utf-8")
+    result = JudgeResult(label=0, latency_s=0.2, prompt_tokens=1, completion_tokens=1, error=None)
+    JudgeCache(path).put(SENTENCE, result)
+    assert JudgeCache(path).get(SENTENCE) == result
+
+
 def test_route():
     yes = JudgeResult(label=1, latency_s=0.5, prompt_tokens=1, completion_tokens=1, error=None)
     broken = JudgeResult(label=None, latency_s=0.5, prompt_tokens=0, completion_tokens=0, error="x")
