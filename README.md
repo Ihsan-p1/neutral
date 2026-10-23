@@ -284,6 +284,76 @@ PYTHONPATH=src .venv-train/Scripts/python.exe -m training.run_m8 --report
 `.venv-train` also needs `pydantic==2.10.4 pydantic-settings==2.7.0`, the serving pins,
 because the runner loads the serving classifier.
 
+### PRD 8.3: partisan outlets get a higher `article_score` than centre outlets
+
+I scored 2,650 articles from 53 US outlets that AllSides rated in 2020 (Baly et al. 2020
+articles, 50 per outlet). The more partisan the rating, the higher the outlet's median
+`article_score`: Spearman ρ = 0.631, 95% CI [0.447, 0.772]. It is the first test of
+`article_score`, the number the API returns, against a rating made outside BABE. A TF-IDF
+baseline on the same sentences reaches ρ = 0.606 [0.412, 0.758]. The paired difference,
++0.024 [−0.073, +0.133], includes zero, so I cannot say DeBERTa adds anything at the outlet
+level.
+
+I wrote the heading above, its null version and the decision rule before scoring any article.
+
+- One point per outlet. Opinion sections that AllSides rates separately (CNN, Fox News, New
+  York Times) count as their own outlet. The outlet's score is the median `article_score` of
+  50 articles drawn at random (seed 0) from those with at least 5 sentences.
+- |lean| is 2 for Left and Right, 1 for Lean Left and Lean Right, 0 for Center: 12 centre
+  outlets, 19 lean, 22 full. Each rating comes from the outlet's AllSides page in the Wayback
+  Machine, the 2019-2020 snapshot closest to June 2020, because ratings changed: USA Today, AP
+  and NPR were Center then and are Lean Left now. TheBlaze, The Week and FiveThirtyEight have
+  no snapshot in that window and are left out of the main figure.
+- I dropped every article that contains a BABE sentence of 40 characters or more, whatever
+  its URL. That removed one article.
+- Confidence intervals come from a bootstrap over outlets, 2,000 draws. Before scoring, the
+  ONNX model has to reproduce its fold-0 macro F1 of 0.8765; it did.
+
+| Check | Outlets | DeBERTa ρ, 95% CI | TF-IDF ρ |
+|---|---|---|---|
+| 2020 ratings (main) | 53 | 0.631 [0.447, 0.772] | 0.606 |
+| 2026 ratings | 56 | 0.448 [0.217, 0.654] | 0.416 |
+| News outlets only | 50 | 0.606 [0.416, 0.755] | 0.566 |
+| Outlets not in BABE | 43 | 0.580 [0.373, 0.750] | 0.577 |
+
+The median score of partisan outlets sits 0.139 [0.085, 0.283] above that of centre outlets.
+The trend has exceptions: BuzzFeed News (Left) scores 0.087 and Newsmax (Lean Right) 0.111,
+next to Reuters at 0.077.
+
+The main limit is genre. The centre outlets here are mostly wire and business news (Reuters
+0.077, Wall Street Journal 0.078, Bloomberg 0.088, AP 0.099), while many of the fully partisan
+ones publish commentary (Salon 0.636, American Spectator 0.669). Part of ρ may be the model
+picking up opinion writing rather than partisanship. Dropping the three opinion sections
+leaves ρ at 0.606, but AllSides files sites such as Townhall and Daily Kos under news, so
+that check narrows the problem without removing it. AllSides is also one organisation's
+judgement, and Baly's articles were collected for balanced search, not sampled at random
+from each outlet.
+
+AllSides Media Bias Ratings™ by AllSides.com are licensed under CC BY-NC 4.0. The 2020 and
+2026 ratings used here are in `training/outlet_ratings.csv`.
+
+Reproduce (about 2 hours 15 minutes on this laptop's CPU, resumable; `.venv-train` also needs
+`pysbd==0.3.4 py3langid==0.3.0`, the serving pins):
+
+```bash
+git clone https://github.com/ramybaly/Article-Bias-Prediction data/baly/repo
+git -C data/baly/repo checkout ced8111a720948e6a410e52031ace99c4e53f096
+PYTHONPATH=src .venv/Scripts/python.exe -m training.fetch_ratings   # only to rebuild the CSV
+PYTHONPATH=src .venv-train/Scripts/python.exe -u -m training.run_outlets
+```
+
+The articles come from Baly et al. 2020:
+
+```bibtex
+@inproceedings{baly2020we,
+    title     = {We Can Detect Your Bias: Predicting the Political Ideology of News Articles},
+    author    = {Baly, Ramy and Da San Martino, Giovanni and Glass, James and Nakov, Preslav},
+    booktitle = {Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)},
+    pages     = {4982--4991},
+    year      = {2020}
+}
+```
+
 ## Limitations
 
 While `NEUTRAL_MODEL_BACKEND=stub`, every number the app displays has no predictive value
@@ -335,4 +405,5 @@ If you use the dataset, cite the paper:
 ## Licence
 
 The code is MIT; see [LICENSE](LICENSE). It does not cover BABE or BASIL, which this
-repository does not redistribute, or model weights trained on them.
+repository does not redistribute, or model weights trained on them. The AllSides ratings in
+`training/outlet_ratings.csv` stay under CC BY-NC 4.0.

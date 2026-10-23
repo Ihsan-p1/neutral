@@ -396,6 +396,17 @@ Perbaikan:
   yang tidak bermakna secara statistik
 - Yang dinilai adalah arah dan konsistensinya, bukan nilai r yang tinggi
 
+*Dikerjakan 2026-10-24, dengan metode yang dipakai:* BABE hanya punya 14 outlet setelah varian
+nama digabung, 10 dengan >= 30 kalimat, jadi artikelnya diambil dari Baly et al. 2020 (37.554
+artikel, commit `ced8111`). Rating adalah AllSides 5 tingkat dari snapshot Wayback 2019-2020
+(rating berubah sejak itu), |lean| 0/1/2, dengan rating 2026 sebagai sensitivitas; MBFC tidak
+dipakai. Unit analisis adalah outlet, bagian opini dengan rating sendiri dihitung terpisah.
+Skor outlet adalah median `article_score` dari 50 artikel acak, dan artikel yang memuat
+kalimat BABE dibuang. Hasil: Spearman ρ = 0,631, CI 95% [0,447; 0,772] pada 53 outlet, naik
+bersama partisan. Baseline TF-IDF 0,606, selisih berpasangan +0,024 [−0,073; +0,133], jadi
+DeBERTa tidak terbukti lebih baik di tingkat outlet. Batasan utama: outlet center di sampel
+kebanyakan kantor berita, outlet partisan banyak yang berisi opini. Rincian di README.
+
 ### 8.4 Analisis kualitatif
 
 Kategorikan 50 error terparah menjadi taksonomi kegagalan, dan laporkan di
