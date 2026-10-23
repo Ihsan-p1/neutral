@@ -1,0 +1,57 @@
+unit,kind,baly_sources,allsides_path,rating_2020,snapshot_2020,rating_2026,babe_outlet
+CNN (News),news,CNN (Web News),/news-source/cnn-media-bias,Lean Left,20200604083724,Lean Left,
+CNN (Opinion),opinion,CNN - Editorial,/news-source/cnn-editorial,Left,20200508075828,Left,
+Washington Times,news,Washington Times,/news-source/washington-times-bias,Lean Right,20200604083704,Lean Right,
+Politico,news,Politico,/news-source/politico-media-bias,Lean Left,20200523073932,Lean Left,
+Fox News,news,Fox Online News|Fox News|Fox News (Online),/news-source/fox-news-media-bias,Lean Right,20200604083720,Right,Fox News
+Fox News (Opinion),opinion,Fox News Opinion,/news-source/fox-news-editorial-media-bias,Right,20200617112402,Right,Fox News
+NPR,news,NPR Online News,/news-source/npr-media-bias,Center,20200522152735,Lean Left,
+USA Today,news,USA TODAY,/news-source/usa-today-media-bias,Center,20200604083709,Lean Left,USA Today
+Vox,news,Vox,/news-source/vox-news-media-bias,Left,20200604092143,Left,
+New York Times (News),news,New York Times - News,/news-source/new-york-times,Lean Left,20200604083709,Lean Left,New York Times
+New York Times (Opinion),opinion,New York Times - Opinion,/news-source/new-york-times-opinion-media-bias,Left,20200523080746,Left,New York Times
+The Hill,news,The Hill,/news-source/hill-media-bias,Center,20200602201629,Center,
+Christian Science Monitor,news,Christian Science Monitor,/news-source/christian-science-monitor,Center,20200609051320,Center,
+Townhall,news,Townhall,/news-source/townhall-bias,Right,20200617075035,Right,
+National Review,news,National Review,/news-source/national-review,Right,20200523090625,Lean Right,
+Reuters,news,Reuters,/news-source/reuters,Center,20200604083736,Center,Reuters
+BBC News,news,BBC News,/news-source/bbc-news-media-bias,Center,20200508075743,Center,
+Salon,news,Salon,/news-source/salon,Left,20200523073846,Left,
+Newsmax,news,Newsmax|Newsmax - News,/news-source/newsmax,Lean Right,20200616152244,Right,
+The Guardian,news,The Guardian,/news-source/guardian,Lean Left,20200523073839,Left,The Guardian
+Reason,news,Reason,/news-source/reason,Lean Right,20200604092139,Center,
+CBN,news,CBN,/news-source/cbn,Right,20200522170652,Right,
+Breitbart News,news,Breitbart News,/news-source/breitbart,Right,20200604092130,Right,Breitbart
+Associated Press,news,Associated Press,/news-source/associated-press-media-bias,Center,20200604083729,Lean Left,
+ABC News,news,ABC News,/news-source/abc-news-media-bias,Lean Left,20200605200757,Lean Left,
+The Daily Caller,news,The Daily Caller,/news-source/daily-caller,Right,20200529105335,Lean Right,
+Wall Street Journal (News),news,Wall Street Journal - News,/news-source/wall-street-journal-media-bias,Center,20200528023035,Center,
+American Spectator,news,American Spectator,/news-source/american-spectator,Right,20200529074546,Right,
+Daily Beast,news,Daily Beast,/news-source/daily-beast-media-bias,Left,20200529195109,Left,Daily Beast
+TheBlaze,news,TheBlaze.com,/news-source/blaze-media-media-bias,,,Right,TheBlaze
+New York Post,news,New York Post,/news-source/new-york-post,Right,20200604083732,Right,New York Post
+Bloomberg,news,Bloomberg,/news-source/bloomberg-media-bias,Center,20200524181405,Center,
+The Atlantic,news,The Atlantic,/news-source/atlantic,Lean Left,20200522152715,Left,
+CBS News,news,CBS News,/news-source/cbs-news-media-bias,Lean Left,20200617014920,Lean Left,
+Slate,news,Slate,/news-source/slate,Left,20200523080747,Left,
+Vanity Fair,news,Vanity Fair,/news-source/vanity-fair,Lean Left,20200531152157,Lean Left,
+Al Jazeera,news,Al Jazeera,/news-source/al-jazeera-media-bias,Lean Left,20200604083725,Lean Left,
+Daily Kos,news,Daily Kos,/news-source/daily-kos,Left,20200601045745,Left,
+The Daily Wire,news,The Daily Wire,/news-source/daily-wire,Right,20200604083700,Right,
+The Week (News),news,The Week - News,/news-source/week-news-media-bias,,,Lean Left,
+Mother Jones,news,Mother Jones,/news-source/mother-jones-bias,Left,20200617112414,Left,
+Washington Post,news,Washington Post,/news-source/washington-post-media-bias,Lean Left,20200604092149,Lean Left,
+CNBC,news,CNBC,/news-source/cnbc,Center,20200606193838,Lean Left,
+Media Matters,news,Media Matters,/news-source/media-matters-bias,Left,20200630205435,Left,
+MarketWatch,news,MarketWatch,/news-source/marketwatch-media-bias,Lean Right,20200523073853,Center,
+Chicago Sun-Times,news,Chicago Sun-Times,/news-source/chicago-sun-times,Lean Left,20200529130050,Lean Left,
+Business Insider,news,Business Insider,/news-source/business-insider,Center,20200522170704,Lean Left,
+Axios,news,Axios,/news-source/axios,Center,20200523073847,Lean Left,
+Vice,news,Vice,/news-source/vice-media-bias,Left,20200606213821,Left,
+Time Magazine,news,Time Magazine,/news-source/time-magazine-news-media-bias,Lean Left,20200507173134,Lean Left,
+Democracy Now,news,Democracy Now,/news-source/democracy-now,Left,20200601030850,Left,
+ProPublica,news,ProPublica,/news-source/propublica,Lean Left,20200529154914,Lean Left,
+BuzzFeed News,news,BuzzFeed News,/news-source/buzzfeed-media-bias,Left,20200512092422,Left,
+HotAir,news,HotAir,/news-source/hotair,Lean Right,20200806072458,Lean Right,
+New York Magazine,news,New York Magazine,/news-source/new-york-magazine,Left,20200616084518,Left,
+FiveThirtyEight,news,FiveThirtyEight,/news-source/538-abc-news-media-bias,,,Center,
