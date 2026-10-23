@@ -1,6 +1,6 @@
 """Fill the 2019-2020 AllSides rating of each unit from Wayback Machine snapshots.
 
-Run: PYTHONPATH=src .venv-train/Scripts/python.exe -m training.fetch_ratings [CSV]
+Run: PYTHONPATH=src .venv/Scripts/python.exe -m training.fetch_ratings [CSV]
 (rerun to retry rows still blank after a network error)
 
 AllSides ratings change over time (USA Today was Center in June 2020 and Lean

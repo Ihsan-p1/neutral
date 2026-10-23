@@ -7,7 +7,7 @@ Run in .venv-train with the serving package importable:
 Spec: docs/superpowers/specs/2026-10-24-prd83-outlet-validation-design.md. Every
 rule used here (50 articles per unit, median, bootstrap over units, the verdict)
 was fixed before scoring. No article text is printed or written: the cache keeps
-ids and counts only.
+ids, text digests and counts only.
 """
 
 import argparse
@@ -34,17 +34,21 @@ from training.outlet_stats import (
 from training.outlets import (
     BALY_ROOT,
     BALY_SIZE,
+    MAX_CHARS,
     MIN_UNITS,
     PER_UNIT,
     RATINGS_CSV,
+    UNRATED,
     Article,
     Unit,
     babe_index,
     lean,
     load_baly,
+    load_score_cache,
     load_units,
     pick_articles,
     side,
+    text_digest,
 )
 from training.run_m8 import (
     MODEL_DIR,
@@ -66,7 +70,20 @@ def _head() -> str:
     return out.stdout.strip()
 
 
+def _check_settings() -> None:
+    """The article filter and the TF-IDF threshold copy two serving settings; stop if an
+    environment override has moved them, instead of crashing or mixing thresholds later."""
+    settings = Settings()
+    if (settings.max_chars, settings.decision_threshold) != (MAX_CHARS, THRESHOLD):
+        raise RuntimeError(
+            f"Settings max_chars {settings.max_chars} / decision_threshold "
+            f"{settings.decision_threshold} differ from the spec's {MAX_CHARS} / {THRESHOLD}; "
+            "unset NEUTRAL_MAX_CHARS and NEUTRAL_DECISION_THRESHOLD"
+        )
+
+
 def self_check() -> None:
+    _check_settings()
     units = load_units(RATINGS_CSV)
     sources = {a.source for a in load_baly(BALY_ROOT)}
     missing = [s for u in units for s in u.sources if s not in sources]
@@ -76,7 +93,7 @@ def self_check() -> None:
         if not unit.rating_2026:
             raise RuntimeError(f"{unit.name} has no 2026 rating")
         for rating in (unit.rating_2020, unit.rating_2026):
-            if rating and lean(rating) is None:
+            if rating and lean(rating) is None and rating not in UNRATED:
                 raise RuntimeError(f"{unit.name}: unknown rating {rating!r}")
     rated = sum(1 for u in units if lean(u.rating_2020) is not None)
     print(f"units: {len(units)}, with a 2020 lean: {rated}")
@@ -89,33 +106,31 @@ def _guard() -> float:
     return assert_onnx_reproduces(probs, fold0.labels)
 
 
-def _load_cache(fingerprint: str) -> dict[str, dict]:
-    if not SCORE_CACHE.exists():
-        return {}
-    cached = {}
-    for line in SCORE_CACHE.read_text(encoding="utf-8").splitlines():
-        record = json.loads(line)
-        if record["fingerprint"] == fingerprint:
-            cached[record["id"]] = record
-    return cached
-
-
 def score_deberta(articles: list[Article]) -> dict[str, float]:
     """article_score per article id, through the same analyze() the API calls."""
     fingerprint = _model_fingerprint()
-    cached = _load_cache(fingerprint)
-    todo = [a for a in articles if a.id not in cached]
+    cached, skipped = load_score_cache(SCORE_CACHE, fingerprint)
+    if skipped:
+        print(f"score cache        : skipped {skipped} unreadable line(s)")
+    digests = {a.id: text_digest(a.text) for a in articles}
+    todo = [a for a in articles if cached.get(a.id, {}).get("digest") != digests[a.id]]
     if todo:
         clf = OnnxClassifier(str(MODEL_DIR), temperature=1.0, version=_model_version())
         settings = Settings()
         RUNS.mkdir(exist_ok=True)
         start = time.perf_counter()
+        # A run killed mid-write leaves no final newline; start the next record on its own line.
+        tail = SCORE_CACHE.read_bytes()[-1:] if SCORE_CACHE.exists() else b""
+        if tail not in (b"", b"\n"):
+            with SCORE_CACHE.open("a", encoding="utf-8") as f:
+                f.write("\n")
         with SCORE_CACHE.open("a", encoding="utf-8") as f:
             for i, article in enumerate(todo, 1):
                 result = analyze(article.text, clf, settings, return_sentences=False)
                 record = {
                     "id": article.id,
                     "fingerprint": fingerprint,
+                    "digest": digests[article.id],
                     "n_sentences": result.n_sentences,
                     "n_biased": result.n_biased,
                 }
@@ -217,6 +232,7 @@ def report(units, picks, counts, deb_unit, tfidf_unit, excluded, guard_f1) -> st
 
 
 def main() -> None:
+    _check_settings()
     guard_f1 = _guard()
     babe, _ = load_babe()
     articles = load_baly(BALY_ROOT)
@@ -227,13 +243,18 @@ def main() -> None:
     picks, counts, excluded, kept_units = {}, {}, [], []
     for unit in load_units(RATINGS_CSV):
         kept, count = pick_articles(articles, unit, babe_text, babe_urls)
+        counts[unit.name] = count
         if len(kept) < PER_UNIT:
             excluded.append(f"{unit.name} ({len(kept)} qualifying articles)")
             continue
-        picks[unit.name], counts[unit.name] = kept, count
+        picks[unit.name] = kept
         kept_units.append(unit)
     rated = [u for u in kept_units if lean(u.rating_2020) is not None]
-    excluded += [f"{u.name} (no 2019-2020 rating)" for u in kept_units if u not in rated]
+    excluded += [
+        f"{u.name} (2020 rating {u.rating_2020})" if u.rating_2020 in UNRATED
+        else f"{u.name} (no 2019-2020 rating)"
+        for u in kept_units if u not in rated
+    ]
     if len(rated) < MIN_UNITS:
         raise RuntimeError(f"only {len(rated)} rated units qualify, PRD 8.3 needs {MIN_UNITS}")
     chosen = [a for u in kept_units for a in picks[u.name]]

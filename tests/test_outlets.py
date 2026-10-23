@@ -7,9 +7,11 @@ from training.outlets import (
     babe_index,
     lean,
     load_baly,
+    load_score_cache,
     load_units,
     pick_articles,
     side,
+    text_digest,
 )
 
 BABE_SENTENCE = "The senator gave a long and very rambling speech on the floor today."
@@ -140,3 +142,28 @@ def test_pick_returns_short_list_when_too_few():
     kept, counts = pick_articles(articles, UNIT, [], set(), per_unit=3)
     assert len(kept) == 2
     assert counts["too_short"] == 2
+
+
+def test_text_digest_changes_with_text():
+    assert text_digest("a b") == text_digest("a b")
+    assert text_digest("a b") != text_digest("a c")
+    assert len(text_digest("a b")) == 16
+
+
+def test_load_score_cache_keeps_this_model_and_skips_a_cut_line(tmp_path):
+    path = tmp_path / "scores.jsonl"
+    rows = [
+        {"id": "a", "fingerprint": "m1", "digest": "d", "n_sentences": 6, "n_biased": 1},
+        {"id": "b", "fingerprint": "m2", "digest": "d", "n_sentences": 6, "n_biased": 2},
+        {"id": "a", "fingerprint": "m1", "digest": "e", "n_sentences": 7, "n_biased": 3},
+    ]
+    text = "".join(json.dumps(r) + "\n" for r in rows) + '{"id": "c", "fingerp'
+    path.write_text(text, encoding="utf-8")
+    cached, skipped = load_score_cache(path, "m1")
+    assert list(cached) == ["a"]
+    assert cached["a"]["digest"] == "e"
+    assert skipped == 1
+
+
+def test_load_score_cache_missing_file(tmp_path):
+    assert load_score_cache(tmp_path / "none.jsonl", "m1") == ({}, 0)

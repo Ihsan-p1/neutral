@@ -5,6 +5,7 @@ the spec (sections 5 and 6) before any article is scored.
 """
 
 import csv
+import hashlib
 import json
 import pathlib
 import random
@@ -23,6 +24,7 @@ MIN_UNITS = 12
 MIN_SENTENCES = 5
 MAX_CHARS = 50_000
 MIN_OVERLAP_CHARS = 40
+UNRATED = ("Mixed", "Not Rated")
 
 _LEAN = {"Left": 2, "Lean Left": 1, "Center": 0, "Lean Right": 1, "Right": 2}
 _SIDE = {
@@ -94,6 +96,31 @@ def load_baly(root: pathlib.Path) -> list[Article]:
             )
         )
     return articles
+
+
+def text_digest(text: str) -> str:
+    """Short SHA-256 of an article's text, so a cached score is reused only for that text."""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+
+
+def load_score_cache(path: pathlib.Path, fingerprint: str) -> tuple[dict[str, dict], int]:
+    """Cached score records for one model, by article id; a later line wins.
+
+    A run killed mid-write leaves a line cut short. Such lines are skipped and counted
+    rather than blocking the resume.
+    """
+    if not path.exists():
+        return {}, 0
+    cached, skipped = {}, 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            skipped += 1
+            continue
+        if record["fingerprint"] == fingerprint:
+            cached[record["id"]] = record
+    return cached, skipped
 
 
 def babe_index(sentences: list[str]) -> list[str]:
