@@ -75,6 +75,17 @@ def paired_spearman_diff(
     )
 
 
+def verdict(point: float, lo: float, hi: float) -> str:
+    """Spec section 8 decision rule, fixed before any article was scored."""
+    if np.isnan(point) or np.isnan(lo) or np.isnan(hi):
+        return "undefined"
+    if lo > 0:
+        return "rises with partisanship"
+    if hi < 0:
+        return "falls with partisanship"
+    return "no evidence"
+
+
 def median_gap(
     scores: Sequence[float], partisan: Sequence[bool], n_boot: int = 2000, seed: int = 0
 ) -> Interval:

@@ -7,6 +7,7 @@ from training.outlet_stats import (
     median_gap,
     paired_spearman_diff,
     spearman,
+    verdict,
 )
 
 
@@ -45,6 +46,14 @@ def test_bootstrap_skips_constant_draws():
 def test_paired_diff_identical_scores_is_zero():
     x, a = [0, 1, 2, 2], [0.1, 0.4, 0.5, 0.7]
     assert paired_spearman_diff(x, a, a, n_boot=200)[:3] == (0.0, 0.0, 0.0)
+
+
+def test_verdict_follows_spec_rule():
+    assert verdict(0.4, 0.1, 0.6) == "rises with partisanship"
+    assert verdict(0.2, -0.1, 0.5) == "no evidence"
+    assert verdict(-0.4, -0.6, -0.1) == "falls with partisanship"
+    assert verdict(0.3, 0.0, 0.5) == "no evidence"
+    assert verdict(float("nan"), float("nan"), float("nan")) == "undefined"
 
 
 def test_median_gap_hand_computed():
