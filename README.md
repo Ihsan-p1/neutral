@@ -305,7 +305,8 @@ I wrote the heading above, its null version and the decision rule before scoring
   and NPR were Center then and are Lean Left now. TheBlaze, The Week and FiveThirtyEight have
   no snapshot in that window and are left out of the main figure.
 - I dropped every article that contains a BABE sentence of 40 characters or more, whatever
-  its URL. That removed one article.
+  its URL. The check ran on the 2,803 articles examined while filling the 50 per outlet,
+  and it removed one.
 - Confidence intervals come from a bootstrap over outlets, 2,000 draws. Before scoring, the
   ONNX model has to reproduce its fold-0 macro F1 of 0.8765; it did.
 

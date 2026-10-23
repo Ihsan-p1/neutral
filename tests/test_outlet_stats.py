@@ -53,6 +53,8 @@ def test_verdict_follows_spec_rule():
     assert verdict(0.2, -0.1, 0.5) == "no evidence"
     assert verdict(-0.4, -0.6, -0.1) == "falls with partisanship"
     assert verdict(0.3, 0.0, 0.5) == "no evidence"
+    assert verdict(-0.01, 0.01, 0.2) == "no evidence"
+    assert verdict(0.01, -0.2, -0.01) == "no evidence"
     assert verdict(float("nan"), float("nan"), float("nan")) == "undefined"
 
 

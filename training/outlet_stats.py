@@ -79,9 +79,9 @@ def verdict(point: float, lo: float, hi: float) -> str:
     """Spec section 8 decision rule, fixed before any article was scored."""
     if np.isnan(point) or np.isnan(lo) or np.isnan(hi):
         return "undefined"
-    if lo > 0:
+    if point > 0 and lo > 0:
         return "rises with partisanship"
-    if hi < 0:
+    if point < 0 and hi < 0:
         return "falls with partisanship"
     return "no evidence"
 
