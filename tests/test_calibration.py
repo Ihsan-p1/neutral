@@ -1,12 +1,17 @@
+import json
+
 import numpy as np
 import pytest
 
 from training.calibration import (
+    apply_calibration,
     brier,
     calibration_verdict,
     ece,
+    file_sha256,
     fit_temperature,
     group_bootstrap,
+    load_calibration,
     logit_diff,
     nll,
     prob_biased,
@@ -91,3 +96,56 @@ def test_calibration_verdict():
     assert calibration_verdict(-0.05, -0.01) == "lowers"
     assert calibration_verdict(-0.02, 0.01) == "already_close"
     assert calibration_verdict(0.01, 0.03) == "raises"
+
+
+BASE = {"version": "deberta-babe-f0s3", "temperature": 1.0, "calibrated": False,
+        "max_length": 128, "opset": 17, "babe_fold0_f1_macro": 0.8765, "note": "old"}
+CAL = {"temperature": 1.7, "fitted_on": "babe_fold1", "n": 883,
+       "model_version": "deberta-babe-f0s3", "checkpoint_sha256": "abc",
+       "ece_babe_after": {"point": 0.03, "lo": 0.02, "hi": 0.05},
+       "note": "new", "date": "2026-10-24", "commit": "deadbee"}
+
+
+def test_apply_calibration_matching_hash():
+    meta, applied = apply_calibration(BASE, CAL, "abc")
+    assert applied and meta["temperature"] == 1.7 and meta["calibrated"] is True
+    assert meta["note"] == "new" and meta["ece_babe_after"]["point"] == 0.03
+    assert meta["calibration"] == {"fitted_on": "babe_fold1", "n": 883,
+                                   "date": "2026-10-24", "commit": "deadbee"}
+    for key in ("version", "max_length", "opset", "babe_fold0_f1_macro"):
+        assert meta[key] == BASE[key]
+    assert BASE["temperature"] == 1.0  # base not mutated
+
+
+def test_apply_calibration_other_checkpoint_falls_back():
+    stale = {**BASE, "temperature": 1.7, "calibrated": True, "ece_babe_after": {"point": 0.03}}
+    meta, applied = apply_calibration(stale, CAL, "other")
+    assert not applied and meta["temperature"] == 1.0 and meta["calibrated"] is False
+    assert meta["note"] == "old" and "ece_babe_after" not in meta
+
+
+def test_apply_calibration_missing_file_falls_back():
+    meta, applied = apply_calibration(BASE, None, "abc")
+    assert not applied and meta["temperature"] == 1.0
+
+
+def test_load_calibration_bad_content(tmp_path):
+    assert load_calibration(tmp_path / "missing.json") is None
+    (tmp_path / "bad.json").write_text("{not json", encoding="utf-8")
+    assert load_calibration(tmp_path / "bad.json") is None
+    (tmp_path / "partial.json").write_text('{"temperature": 1.5}', encoding="utf-8")
+    assert load_calibration(tmp_path / "partial.json") is None
+    (tmp_path / "list.json").write_text("[1, 2]", encoding="utf-8")
+    assert load_calibration(tmp_path / "list.json") is None
+
+
+def test_load_calibration_round_trip(tmp_path):
+    path = tmp_path / "calibration.json"
+    path.write_text(json.dumps(CAL), encoding="utf-8")
+    assert load_calibration(path) == CAL
+
+
+def test_file_sha256(tmp_path):
+    path = tmp_path / "w.bin"
+    path.write_bytes(b"abc")
+    assert file_sha256(path) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

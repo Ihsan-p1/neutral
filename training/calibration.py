@@ -8,12 +8,67 @@ sigmoid of diff / T. Dividing by a positive T never changes the sign of diff,
 so labels at threshold 0.5 do not depend on T.
 """
 
+import hashlib
+import json
+import pathlib
 from collections.abc import Callable, Sequence
 
 import numpy as np
 
 N_BINS = 15
 N_BOOT = 2000
+CALIBRATION_PATH = pathlib.Path("training/calibration.json")
+_REQUIRED = ("temperature", "checkpoint_sha256")
+# Fields only a matching calibration may put in metadata; dropped on fallback
+# so a stale ECE never sits next to T = 1.0.
+_CALIBRATED_ONLY = ("ece_babe_after", "calibration")
+
+
+def file_sha256(path: pathlib.Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def load_calibration(path: pathlib.Path) -> dict | None:
+    """The calibration record, or None when missing, unreadable or incomplete."""
+    try:
+        data = json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or any(key not in data for key in _REQUIRED):
+        return None
+    return data
+
+
+def apply_calibration(
+    base: dict, calibration: dict | None, checkpoint_sha256: str
+) -> tuple[dict, bool]:
+    """Metadata with the calibration applied when it belongs to this checkpoint.
+
+    Otherwise T falls back to 1.0 and `calibrated` to False: a temperature
+    fitted on another checkpoint must never travel with these weights.
+    """
+    meta = {key: value for key, value in base.items() if key not in _CALIBRATED_ONLY}
+    applies = (
+        calibration is not None
+        and calibration.get("checkpoint_sha256") == checkpoint_sha256
+        and isinstance(calibration.get("temperature"), int | float)
+        and calibration["temperature"] > 0
+    )
+    if not applies:
+        meta.update(temperature=1.0, calibrated=False)
+        return meta, False
+    meta.update(
+        temperature=float(calibration["temperature"]),
+        calibrated=True,
+        ece_babe_after=calibration.get("ece_babe_after"),
+        note=calibration.get("note", meta.get("note")),
+        calibration={key: calibration.get(key) for key in ("fitted_on", "n", "date", "commit")},
+    )
+    return meta, True
 
 
 def logit_diff(logits: np.ndarray) -> np.ndarray:
