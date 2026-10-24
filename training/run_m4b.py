@@ -34,7 +34,17 @@ from training.calibration import (
     prob_biased,
     reliability_bins,
 )
-from training.m8_stats import f1_macro
+from training.m4b_ablation import (
+    Chunk,
+    entity_verdict,
+    length_quartiles,
+    length_verdict,
+    mask_chunks,
+    word_count,
+)
+from training.m8_stats import bootstrap_f1, f1_macro
+from training.nela import ensure_nltk_resources
+from training.outlet_stats import spearman
 from training.run_m4a import M2_FOLD0_F1
 from training.run_m8 import (
     MODEL_DIR,
@@ -205,6 +215,111 @@ def plot_reliability(
     plt.close(fig)
 
 
+CAVEAT = (
+    "Both ablations measure sensitivity, not proof of a shortcut: the model never saw "
+    "modified input in training."
+)
+
+
+def nltk_chunks(text: str) -> list[Chunk]:
+    import nltk
+
+    tree = nltk.ne_chunk(nltk.pos_tag(nltk.word_tokenize(text)))
+    chunks: list[Chunk] = []
+    for node in tree:
+        if isinstance(node, nltk.Tree):
+            chunks.append((" ".join(word for word, _ in node.leaves()), node.label()))
+        else:
+            chunks.append((node[0], None))
+    return chunks
+
+
+def _entity_lines(
+    fold0: Dataset, fold0_diff: np.ndarray, score_diff, n_boot: int
+) -> tuple[list[str], dict]:
+    keep, originals, masked, entities = [], [], [], 0
+    for i, text in enumerate(fold0.texts):
+        original, masked_text, count = mask_chunks(nltk_chunks(text))
+        if count:
+            keep.append(i)
+            originals.append(original)
+            masked.append(masked_text)
+            entities += count
+    if not keep:
+        return ["entities: none found by NLTK in babe_fold0; no verdict"], {"flip_rate": None}
+    y = fold0.labels[keep]
+    groups = [fold0.groups[i] for i in keep]
+    d_orig, d_mask = score_diff(originals), score_diff(masked)
+    p_orig, p_mask = (d_orig >= 0).astype(int), (d_mask >= 0).astype(int)
+    drop = group_bootstrap(
+        lambda idx: f1_macro(y[idx], p_orig[idx]) - f1_macro(y[idx], p_mask[idx]), groups, n_boot
+    )
+    flip_rate = float(np.mean(p_orig != p_mask))
+    shift = float(np.mean(prob_biased(d_mask, 1.0) - prob_biased(d_orig, 1.0)))
+    raw_f1 = f1_macro(y, (fold0_diff[keep] >= 0).astype(int))
+    lines = [
+        f"entities: {len(keep)} of {len(fold0.texts)} sentences, "
+        f"{entities} entities (NLTK ne_chunk)",
+        f"  F1 raw text {raw_f1:.4f}, re-joined {f1_macro(y, p_orig):.4f}, "
+        f"masked {f1_macro(y, p_mask):.4f}",
+        f"  F1 re-joined - masked {_fmt(drop)} -> {entity_verdict(drop[0], drop[1])}",
+        f"  label flip rate {flip_rate:.4f}, mean change in P(biased) {shift:+.4f}",
+    ]
+    return lines, {"flip_rate": flip_rate, "drop": drop}
+
+
+def _length_lines(
+    fold0: Dataset, fold1: Dataset, fold0_diff: np.ndarray, n_boot: int
+) -> tuple[list[str], dict]:
+    from sklearn.linear_model import LogisticRegression
+
+    len0 = np.array([word_count(t) for t in fold0.texts], dtype=np.float64)
+    len1 = np.array([word_count(t) for t in fold1.texts], dtype=np.float64)
+    y0 = fold0.labels
+    model = LogisticRegression().fit(len1.reshape(-1, 1), fold1.labels)
+    p_len = model.predict(len0.reshape(-1, 1))
+    majority = int(np.mean(fold1.labels) >= 0.5)
+    p_const = np.full(len(y0), majority)
+    gain = group_bootstrap(
+        lambda idx: f1_macro(y0[idx], p_len[idx]) - f1_macro(y0[idx], p_const[idx]),
+        fold0.groups,
+        n_boot,
+    )
+    p_deberta = (fold0_diff >= 0).astype(int)
+    lines = [
+        f"length: F1 length-only LR {f1_macro(y0, p_len):.4f}, constant "
+        f"(class {majority}) {f1_macro(y0, p_const):.4f}, DeBERTa {f1_macro(y0, p_deberta):.4f}",
+        f"  F1 length-only - constant {_fmt(gain)} -> {length_verdict(gain[1])}",
+    ]
+    quartile = length_quartiles(len0)
+    for q in range(4):
+        rows = np.flatnonzero(quartile == q)
+        if not len(rows):
+            continue
+        groups = [fold0.groups[i] for i in rows]
+        lo, hi = bootstrap_f1(y0[rows], p_deberta[rows], groups, n_boot=n_boot)
+        lines.append(
+            f"  quartile {q + 1}: {int(len0[rows].min())}-{int(len0[rows].max())} words, "
+            f"n={len(rows)}, DeBERTa F1 {f1_macro(y0[rows], p_deberta[rows]):.4f} "
+            f"[{lo:.4f}, {hi:.4f}]"
+        )
+    lines.append(
+        f"  Spearman length vs P(biased) {spearman(len0, prob_biased(fold0_diff, 1.0)):+.4f}, "
+        f"length vs gold {spearman(len0, y0):+.4f}"
+    )
+    return lines, {"gain": gain}
+
+
+def ablation_block(
+    fold0: Dataset, fold1: Dataset, fold0_diff: np.ndarray, score_diff, n_boot: int = N_BOOT
+) -> tuple[list[str], dict]:
+    """Entity and length sensitivity on BABE fold 0; `score_diff` maps texts to logit diffs."""
+    entity_lines, entity_stats = _entity_lines(fold0, fold0_diff, score_diff, n_boot)
+    length_lines, length_stats = _length_lines(fold0, fold1, fold0_diff, n_boot)
+    lines = ["ablation on babe_fold0", *entity_lines, *length_lines, CAVEAT]
+    return lines, {"entities": entity_stats, "length": length_stats}
+
+
 def _git_head() -> str:
     return subprocess.run(
         ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True, check=True
@@ -257,6 +372,11 @@ def run() -> None:
     t_basil = fit_temperature(diffs["basil_dev"], basil_dev.labels)
     p_basil = prob_biased(diffs["basil_test"], t_basil)
     ece_basil = _metric_ci(ece, p_basil, basil_test.labels, basil_test.groups, N_BOOT)
+    ensure_nltk_resources()
+    clf = _classifier()
+    abl_lines, _ = ablation_block(
+        fold0, fold1, diffs["babe_fold0"], lambda texts: logit_diff(onnx_logits(clf, texts))
+    )
 
     report = [
         "M4b-1: temperature scaling and calibration",
@@ -268,6 +388,9 @@ def run() -> None:
         "",
         f"comparison, not served: T fitted on basil_dev (n={len(basil_dev.labels)}) = "
         f"{t_basil:.4f}; basil_test ECE {_fmt(ece_basil)}",
+        "",
+        "",
+        *abl_lines,
         "",
         "ECE: top-label confidence, 15 equal-mass bins, edges recomputed per draw; "
         f"CIs: {N_BOOT} article-level bootstrap draws, seed 0",
@@ -302,7 +425,35 @@ def _self_check() -> None:
         path = pathlib.Path(tmp) / "plot.png"
         plot_reliability(stats["synthetic"]["panels"], path)
         assert path.stat().st_size > 0
+    _self_check_ablation()
     print("self-check ok")
+
+
+def _self_check_ablation() -> None:
+    ensure_nltk_resources()
+    _, _, count = mask_chunks(nltk_chunks("Barack Obama visited Paris with Angela Merkel."))
+    assert count >= 1, count
+    _, _, none = mask_chunks(nltk_chunks("the rain fell all day ."))
+    assert none == 0, none
+
+    def synthetic(name: str, n: int) -> Dataset:
+        texts = [
+            "Senator Jane Doe slammed the reckless plan in Ohio ." if i % 2
+            else "Officials in Texas said the report would be released on Tuesday ."
+            for i in range(n)
+        ]
+        labels = np.array([i % 2 for i in range(n)])
+        return Dataset(name, texts, labels, [f"g{i % 10}" for i in range(n)])
+
+    def score_diff(texts: list[str]) -> np.ndarray:
+        return np.array([2.0 if "slammed" in text else -2.0 for text in texts])
+
+    fold0, fold1 = synthetic("f0", 40), synthetic("f1", 40)
+    lines, stats = ablation_block(fold0, fold1, score_diff(fold0.texts), score_diff, n_boot=100)
+    text = "\n".join(lines)
+    assert "no measurable reliance on entity names" in text, text
+    assert "length alone" in text, text
+    assert stats["entities"]["flip_rate"] == 0.0
 
 
 def main() -> None:
