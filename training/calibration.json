@@ -1,0 +1,15 @@
+{
+  "temperature": 1.23108353593543,
+  "fitted_on": "babe_fold1",
+  "n": 883,
+  "model_version": "deberta-babe-f0s3",
+  "checkpoint_sha256": "0b933f03842e27671b1cd1f88b5b702ed59d1cbdc37e0b35205f5a7bb9eb5505",
+  "ece_babe_after": {
+    "point": 0.03270859903647996,
+    "lo": 0.027095227001914548,
+    "hi": 0.06173216701632608
+  },
+  "note": "temperature fitted on BABE fold 1 (n=883) by NLL; ECE on BASIL test is in the README; babe_fold0_f1_macro belongs to a single checkpoint, not the 25-run mean of 0.8477 +/- 0.0277 that M2 reports.",
+  "date": "2026-10-25",
+  "commit": "513d99c"
+}

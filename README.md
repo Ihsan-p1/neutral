@@ -19,8 +19,9 @@ fp32 ONNX by `training/export_onnx.py`, so the `onnx` backend now runs on the re
 
 The weights and the export are gitignored and do not travel with a clone. The default is
 still `stub`; to run the real model, export first (see Running locally) and set
-`NEUTRAL_MODEL_BACKEND=onnx`. The shipped temperature is 1.0 — calibration is M4b and has
-not run, so the probabilities are valid as a ranking but are not calibrated.
+`NEUTRAL_MODEL_BACKEND=onnx`. The export applies the temperature fitted in M4b-1, T = 1.231
+(see Evaluation results), so the probabilities are calibrated on BABE, not only valid as a
+ranking.
 
 ## Documents
 
@@ -355,6 +356,88 @@ The articles come from Baly et al. 2020:
 }
 ```
 
+### The model was already close to calibrated on BABE (ECE 0.0384 before, 0.0327 after)
+
+I fitted one temperature, T = 1.231, by minimising negative log-likelihood on BABE fold 1
+(883 sentences, the fold M2 used for validation) and measured calibration on fold 0 (751
+sentences), which the served checkpoint never trained on. After minus before is −0.0057, 95%
+CI [−0.0140, 0.0080]. The interval includes zero, so scaling made no measurable difference on
+BABE.
+
+On BASIL, with the temperature fitted on BABE, ECE is 0.0345 [0.0254, 0.0512] (0.0602 before
+scaling). That paired drop, −0.0257 [−0.0307, −0.0188], excludes zero: outside BABE the
+unscaled model was overconfident, and the BABE temperature removes about 43% of the error.
+A temperature fitted on BASIL's own dev split (T = 1.558) brings BASIL test to 0.0253
+[0.0234, 0.0402]. That one is a comparison only; it is not the value the API serves.
+
+I wrote both possible headings, the BASIL sentence and the decision rule before the run.
+
+| Set | Sentences | ECE, T = 1 | ECE, T = 1.231 | Brier, T = 1 → 1.231 | NLL, T = 1 → 1.231 |
+|---|---|---|---|---|---|
+| BABE fold 0 | 751 | 0.0384 [0.0285, 0.0678] | 0.0327 [0.0271, 0.0617] | 0.0941 → 0.0929 | 0.3105 → 0.3056 |
+| BASIL test | 5,780 | 0.0602 [0.0483, 0.0781] | 0.0345 [0.0254, 0.0512] | 0.1387 → 0.1359 | 0.4697 → 0.4438 |
+
+![Reliability diagrams for BABE fold 0 and BASIL test, before and after temperature scaling](docs/img/m4b_reliability.png)
+
+- Labels do not change. The threshold is 0.5 and the model is binary, so dividing the logits
+  by a positive T never flips a decision. F1, `article_score`, M8 and PRD 8.3 stand as
+  reported; only the `probability` field moves.
+- ECE uses top-label confidence in 15 equal-mass bins. Confidence intervals come from 2,000
+  bootstrap draws over articles, with the bin edges recomputed in each draw. ECE depends on
+  the binning, so Brier score and NLL sit next to it; both fall on both sets.
+- The temperature reaches serving through `training/calibration.json`, which is tied to the
+  checkpoint by the SHA-256 of `models/deberta-babe/model.safetensors`.
+  `training/export_onnx.py` writes T into `models/current/metadata.json` only when that hash
+  matches; otherwise it writes 1.0 and `"calibrated": false`.
+
+### Ablation: the model relies on entity names, and length alone carries signal in BABE
+
+Both checks run on BABE fold 0. They measure sensitivity, not proof of a shortcut: the model
+never saw modified input in training.
+
+- **Entity names.** NLTK's `ne_chunk` found 1,603 entities in 640 of the 751 sentences. I
+  replaced each with a generic phrase (person "someone", organisation "an organization",
+  place "a place", anything else "something"). On those 640 sentences macro F1 falls from
+  0.8708 to 0.8364, a drop of 0.0344 [0.0113, 0.0601], so by the rule written before the run
+  the model relies on entity names. 7.0% of labels flip, and P(biased) rises by 0.039 on
+  average. The 0.8708 is on text re-joined from NLTK's tokens, so the masking is the only
+  change; the raw text scores 0.8773. NLTK misses some entities, so the masked text still
+  carries some names.
+- **Sentence length.** A logistic regression on word count alone, fitted on fold 1, reaches
+  macro F1 0.4724 on fold 0. Always predicting "biased" reaches 0.3598. The difference, 0.1127
+  [0.0538, 0.1726], meets the rule for "length alone carries signal", but the signal is weak:
+  the constant predictor scores only one class, and length barely correlates with the gold
+  label (Spearman −0.033). DeBERTa does not appear to follow length. Its F1 stays between
+  0.84 and 0.91 across the four length quartiles with no trend, and length against P(biased)
+  gives Spearman −0.024.
+
+| Length quartile (words) | Sentences | DeBERTa macro F1, 95% CI |
+|---|---|---|
+| 2-22 | 184 | 0.8902 [0.8308, 0.9424] |
+| 23-29 | 182 | 0.8385 [0.7734, 0.8928] |
+| 30-36 | 182 | 0.9121 [0.8653, 0.9526] |
+| 37-85 | 203 | 0.8616 [0.8085, 0.9087] |
+
+Limits of both sections:
+
+- One checkpoint (fold 0, seed 3), not the 25 runs behind 0.8477. The temperature belongs to
+  this checkpoint only.
+- Fold 1 also picked that checkpoint in M2, so T is fitted on data that already shaped model
+  selection.
+- Sentra's corpus (2024 Indonesian election news) is further from BABE than BASIL is. A
+  temperature fitted on BABE promises nothing there.
+
+Reproduce (about 15 minutes on this laptop's CPU the first time; the logits are cached in
+`runs/m4b_logits.npz` after that). `.venv-train` needs matplotlib, pinned in
+`training/requirements-train.txt`:
+
+```bash
+PYTHONPATH=src .venv-train/Scripts/python.exe -u -m training.run_m4b
+```
+
+The run rewrites `models/current/metadata.json`. The M8 and PRD 8.3 score caches include
+that file's timestamp, so each rescores once afterwards with unchanged numbers.
+
 ## Limitations
 
 While `NEUTRAL_MODEL_BACKEND=stub`, every number the app displays has no predictive value
@@ -366,8 +449,9 @@ On the `onnx` backend the numbers mean what the evaluation measured, which is na
 it looks. 0.8477 macro-F1 is the BABE figure. On BASIL, a second corpus, the same checkpoint
 reaches 0.5854 against a 0.4868 all-neutral floor — 0.079 above predicting nothing. The
 BABE number alone overstates what the served model does, so the two belong together
-wherever either is quoted. The temperature is also uncalibrated at 1.0 until M4b runs, so
-the probabilities rank correctly but their absolute values do not mean what they appear to.
+wherever either is quoted. The probabilities are calibrated with T = 1.231, fitted on BABE:
+ECE is 0.0327 on BABE fold 0 and 0.0345 on BASIL test. A temperature fitted on BABE says
+nothing about calibration on text further from it.
 
 Limitations that still apply once the model is in place:
 

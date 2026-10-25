@@ -435,7 +435,7 @@ waktu tidak terbuang ke arah yang salah.
 | M2 | Fine-tune DeBERTa, sweep learning rate, 5 seed | Bila tidak mengungguli baseline TF-IDF secara meyakinkan, **berhenti dan periksa kualitas data** sebelum melanjutkan tuning |
 | M3 | Baseline NELA + logistic regression, bandingkan dengan DeBERTa | Delta dilaporkan apa adanya, termasuk bila kecil |
 | M4a | Cross-dataset eval BABE → BASIL, validasi korelasi outlet | Dua angka dilaporkan sesuai bagian 8.2 |
-| M4b | Temperature scaling, ECE dengan CI, ablation shortcut learning, contrast set | Nilai temperature tersimpan bersama metadata model |
+| M4b | Temperature scaling, ECE dengan CI, ablation shortcut learning, contrast set | Nilai temperature tersimpan bersama metadata model. **M4b-1 selesai 2026-10-25:** T = 1,231, ECE BABE fold 0 0,0327 dan BASIL test 0,0345, ablation entity dan panjang (README). **M4b-2 (contrast set) belum dimulai.** |
 | M5 | Ekspor ONNX, kuantisasi INT8, **uji paritas** | Kesepakatan label ≥ 99% dan selisih probabilitas < 0,02, jika tidak turunkan ke fp16 |
 | M6 | FastAPI dan Gradio dalam satu container, Dockerfile, rate limit, logging, CI smoke test | Container jalan dari image bersih, `/health` hijau, startup < 10 detik |
 | M7 | README: problem statement, scope, metrik dengan variansi, error analysis, limitation section | — |
