@@ -30,6 +30,12 @@ import numpy as np
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from training.calibration import (
+    CALIBRATION_PATH,
+    apply_calibration,
+    file_sha256,
+    load_calibration,
+)
 from training.train import MAX_LENGTH
 
 # The torch.onnx progress reporter prints emoji. A Windows console defaults to
@@ -59,11 +65,6 @@ PROBE_SENTENCES = [
     "Officials said the report would be released on Tuesday.",
     "A shameful, cowardly decision.",
 ]
-
-# The calibrated temperature is an M4b output, and M4b has not run. 1.0 means a
-# softmax with no scaling: the probabilities are valid as a ranking but are not
-# calibrated. This value comes from M4b, it is not guessed here.
-TEMPERATURE = 1.0
 
 # Fold 0, seed 3, from models/deberta-babe/m2_selection.json. One checkpoint,
 # not the 25-run mean M2 reports.
@@ -192,9 +193,9 @@ def assert_logits_match(model_dir: str, onnx_path: pathlib.Path) -> float:
 def write_sidecars(model_dir: pathlib.Path, out_dir: pathlib.Path) -> None:
     """Copy the tokenizer and write the metadata `load_classifier` reads."""
     shutil.copy2(model_dir / "tokenizer.json", out_dir / "tokenizer.json")
-    metadata = {
+    base = {
         "version": VERSION,
-        "temperature": TEMPERATURE,
+        "temperature": 1.0,
         "calibrated": False,
         "max_length": MAX_LENGTH,
         "opset": OPSET,
@@ -207,6 +208,15 @@ def write_sidecars(model_dir: pathlib.Path, out_dir: pathlib.Path) -> None:
             "25-run mean of 0.8477 +/- 0.0277 that M2 reports."
         ),
     }
+    # The temperature comes from M4b's calibration.json, and only when that file
+    # was fitted on these exact weights; otherwise 1.0 (uncalibrated).
+    metadata, applied = apply_calibration(
+        base, load_calibration(CALIBRATION_PATH), file_sha256(model_dir / "model.safetensors")
+    )
+    if applied:
+        print(f"calibration      : applied, T = {metadata['temperature']:.4f}")
+    else:
+        print("calibration      : not applied (no calibration.json for this checkpoint), T = 1.0")
     (out_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2) + "\n", encoding="utf-8"
     )
