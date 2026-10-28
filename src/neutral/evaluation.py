@@ -36,7 +36,7 @@ def select_evaluation(
     every label, so both get None.
     """
     ev = evaluations.get(version)
-    if ev is None or backend != "onnx":
+    if ev is None or ev.model_version != version or backend != "onnx":
         return None
     if not math.isclose(threshold, ev.threshold, abs_tol=1e-9):
         return None

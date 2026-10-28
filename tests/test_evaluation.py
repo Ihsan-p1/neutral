@@ -67,3 +67,9 @@ def test_selected_block_is_not_shared():
     a.domains[0].macro_f1 = 0.0
     b = select_evaluation(EVALUATIONS, SERVED, "onnx", 0.5)
     assert b.domains[0].macro_f1 == 0.8765
+
+
+def test_entry_whose_own_version_differs_from_its_key_gives_none():
+    # A copy-pasted entry left with the old inner version must not be served.
+    ev = load_evaluations(EVALUATION_PATH)[SERVED].model_copy(update={"model_version": "other"})
+    assert select_evaluation({SERVED: ev}, SERVED, "onnx", 0.5) is None
