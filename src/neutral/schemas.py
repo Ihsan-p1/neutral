@@ -41,6 +41,8 @@ class AnalyzeResponse(BaseModel):
     sentences: list[SentenceResult]
     model_version: str
     warnings: list[Warning_]
+    # The served model's measured scores, so no caller shows a score without them.
+    evaluation: Evaluation | None = None
 
 
 class HealthResponse(BaseModel):

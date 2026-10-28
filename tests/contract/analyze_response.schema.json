@@ -1,0 +1,190 @@
+{
+  "$defs": {
+    "DomainEvaluation": {
+      "properties": {
+        "constant_baseline_macro_f1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Constant Baseline Macro F1"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "macro_f1": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Macro F1"
+        },
+        "n_sentences": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "N Sentences"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "macro_f1",
+        "n_sentences",
+        "constant_baseline_macro_f1"
+      ],
+      "title": "DomainEvaluation",
+      "type": "object"
+    },
+    "Evaluation": {
+      "properties": {
+        "domains": {
+          "items": {
+            "$ref": "#/$defs/DomainEvaluation"
+          },
+          "title": "Domains",
+          "type": "array"
+        },
+        "metric": {
+          "const": "macro_f1",
+          "title": "Metric",
+          "type": "string"
+        },
+        "model_version": {
+          "title": "Model Version",
+          "type": "string"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "model_version",
+        "metric",
+        "threshold",
+        "domains"
+      ],
+      "title": "Evaluation",
+      "type": "object"
+    },
+    "SentenceResult": {
+      "properties": {
+        "end": {
+          "title": "End",
+          "type": "integer"
+        },
+        "label": {
+          "enum": [
+            "biased",
+            "neutral"
+          ],
+          "title": "Label",
+          "type": "string"
+        },
+        "prob": {
+          "title": "Prob",
+          "type": "number"
+        },
+        "start": {
+          "title": "Start",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "label",
+        "prob",
+        "start",
+        "end"
+      ],
+      "title": "SentenceResult",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "article_score": {
+      "title": "Article Score",
+      "type": "number"
+    },
+    "confidence_mean": {
+      "title": "Confidence Mean",
+      "type": "number"
+    },
+    "evaluation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Evaluation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "model_version": {
+      "title": "Model Version",
+      "type": "string"
+    },
+    "n_biased": {
+      "title": "N Biased",
+      "type": "integer"
+    },
+    "n_sentences": {
+      "title": "N Sentences",
+      "type": "integer"
+    },
+    "sentences": {
+      "items": {
+        "$ref": "#/$defs/SentenceResult"
+      },
+      "title": "Sentences",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "enum": [
+          "non_english",
+          "too_short",
+          "truncated"
+        ],
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "article_score",
+    "n_sentences",
+    "n_biased",
+    "confidence_mean",
+    "sentences",
+    "model_version",
+    "warnings"
+  ],
+  "title": "AnalyzeResponse",
+  "type": "object"
+}

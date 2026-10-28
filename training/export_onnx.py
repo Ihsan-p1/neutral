@@ -68,6 +68,8 @@ PROBE_SENTENCES = [
 
 # Fold 0, seed 3, from models/deberta-babe/m2_selection.json. One checkpoint,
 # not the 25-run mean M2 reports.
+# ponytail: src/neutral/evaluation.json is keyed on this string. A new checkpoint
+# needs a new VERSION and a new entry there, or it inherits these F1 numbers.
 VERSION = "deberta-babe-f0s3"
 
 
