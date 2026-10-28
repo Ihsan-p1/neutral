@@ -81,3 +81,24 @@ def test_return_sentences_false_omits_detail_but_keeps_counts():
 
 def test_model_version_is_reported():
     assert analyze(THREE, CLF, _settings()).model_version == "stub-test"
+
+
+SERVED = StubClassifier(temperature=1.0, version="deberta-babe-f0s3")
+
+
+def test_evaluation_present_for_served_model_on_onnx_backend():
+    # analyze() never builds a classifier, so a stub with the served version
+    # exercises the onnx branch of the selection without loading ONNX.
+    r = analyze(THREE, SERVED, _settings(model_backend="onnx"))
+    assert r.evaluation is not None
+    assert r.evaluation.model_version == "deberta-babe-f0s3"
+
+
+def test_evaluation_absent_on_stub_backend():
+    assert analyze(THREE, SERVED, _settings(model_backend="stub")).evaluation is None
+
+
+def test_evaluation_present_on_empty_input():
+    r = analyze("   ", SERVED, _settings(model_backend="onnx"))
+    assert r.n_sentences == 0
+    assert r.evaluation is not None

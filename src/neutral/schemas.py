@@ -18,6 +18,21 @@ class SentenceResult(BaseModel):
     end: int
 
 
+class DomainEvaluation(BaseModel):
+    name: str
+    description: str
+    macro_f1: float | None
+    n_sentences: int | None
+    constant_baseline_macro_f1: float | None
+
+
+class Evaluation(BaseModel):
+    model_version: str
+    metric: Literal["macro_f1"]
+    threshold: float
+    domains: list[DomainEvaluation]
+
+
 class AnalyzeResponse(BaseModel):
     article_score: float
     n_sentences: int
@@ -26,6 +41,8 @@ class AnalyzeResponse(BaseModel):
     sentences: list[SentenceResult]
     model_version: str
     warnings: list[Warning_]
+    # The served model's measured scores, so no caller shows a score without them.
+    evaluation: Evaluation | None = None
 
 
 class HealthResponse(BaseModel):

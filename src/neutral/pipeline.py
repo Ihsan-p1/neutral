@@ -1,6 +1,7 @@
 from neutral.classifier import Classifier
 from neutral.config import Settings
 from neutral.detect import TextTooLargeError, is_english
+from neutral.evaluation import EVALUATIONS, select_evaluation
 from neutral.schemas import AnalyzeResponse, SentenceResult, Warning_
 from neutral.segment import split_sentences
 
@@ -16,6 +17,10 @@ def analyze(
         raise TextTooLargeError(
             f"text of {len(text)} characters exceeds the limit of {settings.max_chars}"
         )
+
+    evaluation = select_evaluation(
+        EVALUATIONS, clf.version, settings.model_backend, settings.decision_threshold
+    )
 
     warnings: list[Warning_] = []
     if text.strip() and not is_english(text):
@@ -35,6 +40,7 @@ def analyze(
             sentences=[],
             model_version=clf.version,
             warnings=warnings,
+            evaluation=evaluation,
         )
 
     if len(sentences) < settings.min_sentences_warn:
@@ -69,4 +75,5 @@ def analyze(
         sentences=results if return_sentences else [],
         model_version=clf.version,
         warnings=warnings,
+        evaluation=evaluation,
     )

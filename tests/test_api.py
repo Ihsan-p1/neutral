@@ -64,3 +64,9 @@ def test_analyze_handler_is_sync():
     api = create_api(Settings())
     route = next(r for r in api.routes if getattr(r, "path", None) == "/analyze")
     assert not inspect.iscoroutinefunction(route.endpoint)
+
+
+def test_analyze_stub_has_null_evaluation():
+    # The stub reports whatever version it is given; it must still get no scores.
+    body = client(model_version="deberta-babe-f0s3").post("/analyze", json={"text": THREE}).json()
+    assert body["evaluation"] is None

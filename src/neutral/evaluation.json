@@ -1,0 +1,30 @@
+{
+  "deberta-babe-f0s3": {
+    "model_version": "deberta-babe-f0s3",
+    "metric": "macro_f1",
+    "threshold": 0.5,
+    "domains": [
+      {
+        "name": "babe",
+        "description": "BABE fold 0 test, US news, in-domain",
+        "macro_f1": 0.8765,
+        "n_sentences": 751,
+        "constant_baseline_macro_f1": 0.3598
+      },
+      {
+        "name": "basil",
+        "description": "BASIL test, US news, other dataset, no adaptation",
+        "macro_f1": 0.5656,
+        "n_sentences": 5780,
+        "constant_baseline_macro_f1": 0.4868
+      },
+      {
+        "name": "sentra",
+        "description": "Sentra corpus, Indonesian election news in English; not measured yet",
+        "macro_f1": null,
+        "n_sentences": null,
+        "constant_baseline_macro_f1": null
+      }
+    ]
+  }
+}
