@@ -20,10 +20,10 @@
       },
       {
         "name": "sentra",
-        "description": "Sentra corpus, Indonesian election news in English; not measured yet",
-        "macro_f1": null,
-        "n_sentences": null,
-        "constant_baseline_macro_f1": null
+        "description": "Sentra full-text corpus, Indonesian election news in English; owner-labelled sentences, n=145, no adaptation",
+        "macro_f1": 0.5167,
+        "n_sentences": 145,
+        "constant_baseline_macro_f1": 0.4649
       }
     ]
   }

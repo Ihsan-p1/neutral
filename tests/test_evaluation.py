@@ -19,7 +19,7 @@ def test_committed_file_holds_served_numbers():
     by = {d.name: d for d in ev.domains}
     assert _triple(by["babe"]) == (0.8765, 751, 0.3598)
     assert _triple(by["basil"]) == (0.5656, 5780, 0.4868)
-    assert _triple(by["sentra"]) == (None, None, None)
+    assert _triple(by["sentra"]) == (0.5167, 145, 0.4649)
 
 
 def test_selects_block_for_served_onnx_model():
