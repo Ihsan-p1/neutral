@@ -40,8 +40,10 @@ The UI is at `http://localhost:8000` and the API at `http://localhost:8000/analy
 
 Every `/analyze` response carries an `evaluation` block with the served checkpoint's macro F1
 per domain: 0.8765 on BABE fold 0 and 0.5656 on BASIL test, each next to the best constant
-predictor (0.3598 and 0.4868). A third entry, `sentra`, stays `null` until the model is measured
-on Sentra's corpus. A caller that shows a score can show those numbers with it. The block is
+predictor (0.3598 and 0.4868). A third entry, `sentra`, is 0.5167 on 145 sentences I labelled
+from Sentra's corpus of Indonesian election news, against 0.4649 for a constant "all neutral";
+the 95% interval [0.4545, 0.6359] contains that constant, so the model is not shown to beat it
+there. A caller that shows a score can show those numbers with it. The block is
 `null` on the stub backend, for an unknown model version, and when `NEUTRAL_DECISION_THRESHOLD`
 is not 0.5, because the numbers were measured at that threshold only. They live in
 `src/neutral/evaluation.json`, and `tests/contract/` locks the response shape.
